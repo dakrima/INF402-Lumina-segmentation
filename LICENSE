@@ -2,6 +2,13 @@
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
 
+This repository is licensed under the Apache License 2.0.
+
+This license applies only to the source code, scripts, notebooks, and documentation contained in this repository.
+Medical images, datasets, annotations, trained model weights, and third-party assets are not included under this license unless explicitly stated. Their use is governed by their respective licenses, data use agreements, or institutional permissions.
+
+This project is intended for research and educational purposes and is not a certified medical device.
+
    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
    1. Definitions.
@@ -175,18 +182,7 @@
 
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
-
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
-
-   Copyright [yyyy] [name of copyright owner]
+   Copyright 2026 David Kripper and contributors
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.

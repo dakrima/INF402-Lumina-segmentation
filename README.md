@@ -220,6 +220,38 @@ OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_mo
 
 En la prueba exitosa observada, TIAToolbox descargó pesos de aproximadamente `147 MB` y terminó con `Model loaded: OK`. Esos pesos deben quedar en cache fuera del repositorio y no deben subirse a Git. El estado de la prueba se guarda en `outputs/model_checks/tiatoolbox_bcss_model_status.json`.
 
+## Inferencia smoke test con TIAToolbox
+
+Después de validar que el baseline carga, se puede ejecutar una inferencia mínima sobre una imagen local pequeña para verificar que el modelo produce una salida visual. Para tiles o patches pequeños se debe usar `--input-mode patch`, que trata la imagen como un arreglo RGB en memoria y no exige metadata WSI como MPP u objetivo microscópico:
+
+```bash
+conda activate inf402-lumina-seg
+
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
+  --image-path /Users/davidkripper/demoCasesMvpFeria/demo_case_01.tif \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --output-dir outputs/inference_smoke/test_demo_case_01 \
+  --clear-output
+```
+
+Esta prueba usa el flujo `SemanticSegmentor` de TIAToolbox y guarda un preview RGB, una máscara coloreada, un overlay y `inference_summary.json` en la carpeta de salida. Es solo un smoke test técnico: no evalúa calidad, no calcula métricas, no calcula RCB, no diagnostica y no constituye validación clínica.
+
+El modelo entrega IDs numéricos de clase y los colores son asignados por el script de visualización. La salida incluye `legend.json` con la relación `class_id -> color_rgb -> class_name/status -> pixel_count`. Los nombres de clase solo deben considerarse válidos si `class_mapping_source` aparece confirmado desde TIAToolbox/BCSS; mientras figure como `unconfirmed`, la máscara no debe interpretarse clínicamente.
+
+### Importante: BCSS raw vs salida agrupada de TIAToolbox
+
+No mezclar los códigos raw de BCSS con la salida agrupada del modelo preentrenado `fcn_resnet50_unet-bcss`.
+
+En BCSS raw/original, las máscaras `.png` usan los códigos de `meta/gtruth_codes.tsv`; ahí `0 = outside_roi / don't care` y no significa `other`. Ese valor debe tratarse como región fuera de interés en el contexto de ground truth raw.
+
+En la salida del modelo TIAToolbox `fcn_resnet50_unet-bcss`, la predicción está agrupada en cinco clases: `0 = Tumour`, `1 = Stroma`, `2 = Inflammatory`, `3 = Necrosis`, `4 = Others`. Por lo tanto, el valor `0` significa cosas distintas según el contexto: en BCSS raw es `outside_roi / don't care`, mientras que en la predicción agrupada TIAToolbox es `Tumour`.
+
+`legend.json` y `inference_summary.json` registran `class_mapping_source`, `raw_bcss_zero_warning`, `bcss_raw_ground_truth_mapping` y `tiatoolbox_bcss_model_output_mapping` para evitar esta confusión. No usar el mapping raw para interpretar directamente la salida agrupada del modelo. Referencias: https://github.com/PathologyDataScience/BCSS, https://github.com/PathologyDataScience/BCSS/blob/master/meta/gtruth_codes.tsv y https://tia-toolbox.readthedocs.io/en/latest/_notebooks/jnb/06-semantic-segmentation.html.
+
+Para WSI reales se puede usar `--input-mode wsi`, pero esas entradas normalmente necesitan metadata de escala o parámetros explícitos de lectura. Una TIFF pequeña sin MPP puede fallar en modo WSI con errores como `MPP is None`; en ese caso corresponde usar `--input-mode patch` mientras se trabaje con tiles locales. Si la predicción tiene un tamaño distinto al de la imagen de entrada, la máscara se redimensiona con vecino más cercano solo para construir el overlay. El JSON registra tanto el tamaño de predicción como el tamaño visualizado. Los outputs generados, leyendas, overlays y cualquier cache de pesos deben quedar fuera de Git.
+
 ## Advertencia sobre datos y pesos
 
 No subir al repositorio:

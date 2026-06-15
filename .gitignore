@@ -61,3 +61,4 @@ outputs/figures/*
 *.ckpt
 *.h5
 *.onnx
+*.npy

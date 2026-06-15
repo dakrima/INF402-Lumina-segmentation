@@ -63,6 +63,42 @@ OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_mo
 
 `KMP_DUPLICATE_LIB_OK=TRUE` debe tratarse como workaround temporal de smoke test local. No usarlo como configuración global sin revisar consecuencias, ni considerarlo solución para experimentos finales, producción o benchmarks. En la corrida exitosa observada se descargaron pesos de aproximadamente `147 MB`; deben quedar cacheados fuera del repositorio y no subirse a Git. El resultado esperado es `Model loaded: OK` y el JSON queda en `outputs/model_checks/tiatoolbox_bcss_model_status.json`.
 
+#### Inferencia smoke test local
+
+Una vez confirmada la carga del baseline, el siguiente smoke test técnico verifica que `fcn_resnet50_unet-bcss` puede generar una salida visual sobre una imagen local pequeña. Para tiles o patches locales, usar `--input-mode patch`:
+
+```bash
+conda activate inf402-lumina-seg
+
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
+  --image-path /Users/davidkripper/demoCasesMvpFeria/demo_case_01.tif \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --output-dir outputs/inference_smoke/test_demo_case_01 \
+  --clear-output
+```
+
+El comando genera `input_preview.png`, `prediction_mask.png`, `prediction_overlay.png`, `legend.json` e `inference_summary.json` bajo `outputs/inference_smoke/test_demo_case_01/`. Esta corrida no evalúa calidad, no calcula Dice/IoU, no calcula RCB, no diagnostica y no valida clínicamente el sistema; solo comprueba que el baseline puede producir una máscara/overlay revisable.
+
+El script registra en el JSON el modo de entrada, `patch_mode`, tamaño de la imagen, dispositivo usado, versiones de TIAToolbox/PyTorch, clases de modelo/configuración, forma de la predicción, etiquetas observadas, conteos por clase y rutas de salida. Si el tamaño de salida no coincide con el input, el resize se usa únicamente para visualización del overlay.
+
+El modelo devuelve IDs numéricos de clase. Los colores de `prediction_mask.png` y `prediction_overlay.png` son asignados por el script, no necesariamente por el modelo. `legend.json` documenta `class_id -> color_rgb -> class_name/status -> pixel_count`; los nombres solo deben interpretarse si `mapping_source` aparece confirmado desde TIAToolbox/BCSS. Mientras el mapping esté como `unconfirmed`, la máscara sigue siendo una visualización técnica sin interpretación clínica.
+
+#### Importante: BCSS raw vs salida agrupada de TIAToolbox
+
+El mapping raw/original de BCSS y el mapping de salida del modelo `fcn_resnet50_unet-bcss` son distintos y no deben mezclarse.
+
+En BCSS raw/original, los códigos de ground truth están documentados en `meta/gtruth_codes.tsv`: `0 = outside_roi / don't care`. Ese `0` no significa `other` y corresponde a regiones fuera del ROI en las máscaras raw.
+
+En el modelo preentrenado de TIAToolbox, la salida está agrupada en cinco clases: `0 = Tumour`, `1 = Stroma`, `2 = Inflammatory`, `3 = Necrosis`, `4 = Others`. Por eso, el `0` de una predicción agrupada TIAToolbox debe leerse como `Tumour`, no como `outside_roi`.
+
+El smoke test registra ambos contextos en `legend.json` e `inference_summary.json` mediante `bcss_raw_ground_truth_mapping`, `tiatoolbox_bcss_model_output_mapping`, `class_mapping_source` y `raw_bcss_zero_warning`. No usar la salida del smoke test para diagnóstico clínico, cálculo de RCB ni validación clínica.
+
+Referencias: https://github.com/PathologyDataScience/BCSS, https://github.com/PathologyDataScience/BCSS/blob/master/meta/gtruth_codes.tsv y https://tia-toolbox.readthedocs.io/en/latest/_notebooks/jnb/06-semantic-segmentation.html.
+
+Para WSI reales se reserva `--input-mode wsi`. Ese modo puede requerir metadata de escala, como MPP u objective power, o parámetros explícitos de lectura. Una TIFF pequeña sin esa metadata no debe tratarse como WSI en este hito porque puede fallar con errores de escala; para esos casos corresponde `--input-mode patch`.
+
 ### 3. Patching inteligente
 
 Implementar extracción de patches sobre imágenes pequeñas, guardar metadatos trazables y filtrar por proporción aproximada de tejido.

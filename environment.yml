@@ -1,0 +1,20 @@
+name: inf402-lumina-seg
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-image
+  - pillow
+  - tqdm
+  - jupyterlab
+  - ipykernel
+  - openslide
+  - openslide-python
+  - openjpeg
+  - pip:
+      - tiatoolbox
+      - segmentation-models-pytorch

@@ -1,0 +1,13 @@
+numpy
+pandas
+matplotlib
+scikit-image
+pillow
+tqdm
+jupyterlab
+ipykernel
+openslide-python
+tiatoolbox
+torch
+torchvision
+segmentation-models-pytorch

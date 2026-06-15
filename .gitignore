@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.conda/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Data
+data/raw/*
+data/external/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/external/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Outputs
+outputs/*
+!outputs/patches/
+!outputs/masks/
+!outputs/overlays/
+!outputs/metrics/
+!outputs/figures/
+!outputs/patches/.gitkeep
+!outputs/masks/.gitkeep
+!outputs/overlays/.gitkeep
+!outputs/metrics/.gitkeep
+!outputs/figures/.gitkeep
+
+# Large pathology image formats
+*.svs
+*.tif
+*.tiff
+*.ndpi
+*.mrxs
+*.scn
+*.bif
+
+# Models / checkpoints
+models/
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx

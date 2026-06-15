@@ -29,6 +29,8 @@ Implementar extracción de patches sobre imágenes pequeñas, guardar metadatos 
 
 Estado inicial: el primer baseline de patching ya permite cortar imágenes pequeñas, calcular `tissue_ratio`, filtrar patches por umbral, guardar metadata CSV, generar un resumen JSON y producir un preview visual de la grilla seleccionada/rechazada. Esto sirve como base reproducible para documentar el flujo y extenderlo luego a WSI reales con OpenSlide/TIAToolbox.
 
+El patching de imágenes pequeñas ahora soporta políticas de borde: `drop`, `overlap` y `pad`. Para experimentos iniciales se recomienda `overlap` cuando se necesita cubrir toda la imagen sin inventar píxeles; en WSI reales esta lógica deberá adaptarse a lectura por tiles con OpenSlide/TIAToolbox.
+
 ### 4. BCSS mínimo
 
 Incorporar BCSS como dataset principal de segmentación semántica cuando se definan rutas, permisos y formato de descarga. No se debe subir BCSS al repositorio.

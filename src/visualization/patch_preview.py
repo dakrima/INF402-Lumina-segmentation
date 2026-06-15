@@ -38,8 +38,10 @@ def save_patch_selection_preview(
         color = selected_color if patch.selected else rejected_color
         x0 = patch.x
         y0 = patch.y
-        x1 = patch.x + patch.width - 1
-        y1 = patch.y + patch.height - 1
+        x1 = min(preview.width - 1, patch.x + patch.width - 1)
+        y1 = min(preview.height - 1, patch.y + patch.height - 1)
+        if x0 >= preview.width or y0 >= preview.height:
+            continue
         max_patch_line_width = max(1, min(patch.width, patch.height) // 2)
         for offset in range(min(line_width, max_patch_line_width)):
             if x0 + offset > x1 - offset or y0 + offset > y1 - offset:

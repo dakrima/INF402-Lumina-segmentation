@@ -1,0 +1,28 @@
+name: inf402-lumina-seg
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pandas
+  - matplotlib
+  - scikit-image
+  - pillow
+  - tqdm
+  - jupyterlab
+  - ipykernel
+  - openslide
+  - openslide-python
+  - openjpeg
+  # Ajustar esta combinación según nvidia-smi, driver NVIDIA y CUDA disponible
+  # en el servidor. CUDA 12.1 es un punto de partida razonable para A100/H100,
+  # pero debe validarse en iHealth o NLHPC antes de fijarlo como definitivo.
+  - pytorch
+  - torchvision
+  - pytorch-cuda=12.1
+  - pip:
+      - tiatoolbox
+      - segmentation-models-pytorch

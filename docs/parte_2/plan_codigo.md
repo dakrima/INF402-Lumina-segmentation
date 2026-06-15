@@ -107,6 +107,38 @@ Estado inicial: el primer baseline de patching ya permite cortar imágenes peque
 
 El patching de imágenes pequeñas ahora soporta políticas de borde: `drop`, `overlap` y `pad`. Para experimentos iniciales se recomienda `overlap` cuando se necesita cubrir toda la imagen sin inventar píxeles; en WSI reales esta lógica deberá adaptarse a lectura por tiles con OpenSlide/TIAToolbox.
 
+### 3.1. Extracción reproducible desde WSI
+
+Para dejar de depender de scripts pegados en terminal, la extracción desde WSI se formaliza con OpenSlide:
+
+```bash
+python scripts/05_extract_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/wsi_patches/test_tcga_a2_a3xs \
+  --patch-size 1024 \
+  --max-patches 8 \
+  --min-tissue-ratio 0.2 \
+  --thumbnail-size 2048 \
+  --clear-output \
+  --preview-image
+```
+
+El script abre la WSI con OpenSlide, registra dimensiones, niveles, objective power y MPP si están disponibles, construye un thumbnail, estima tejido con una regla simple `mean < 235` y `std > 8`, evalúa candidatos level 0 y guarda patches aceptados en `selected/`. La salida incluye `patches_metadata.csv`, `summary.json` y `patch_selection_preview.png`.
+
+Este paso no ejecuta inferencia, no evalúa calidad, no calcula Dice/IoU, no calcula RCB, no diagnostica y no valida clínicamente. Solo produce patches y metadata reproducible para alimentar smoke tests posteriores.
+
+Ejemplo de inferencia posterior sobre un patch extraído:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
+  --image-path outputs/wsi_patches/test_tcga_a2_a3xs/selected/patch_0000_x12345_y67890.png \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --output-dir outputs/inference_smoke/test_wsi_patch_0000 \
+  --clear-output
+```
+
 ### 4. BCSS mínimo
 
 Incorporar BCSS como dataset principal de segmentación semántica cuando se definan rutas, permisos y formato de descarga. No se debe subir BCSS al repositorio.

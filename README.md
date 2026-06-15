@@ -172,6 +172,38 @@ La salida incluye:
 - `summary.json`: resumen de la corrida, incluyendo cobertura de imagen y cantidad de patches con padding;
 - `patch_selection_preview.png`: grilla visual sobre la imagen original si se usa `--preview-image`.
 
+## Extracción reproducible desde WSI con OpenSlide
+
+Para extraer un conjunto acotado de patches `1024x1024` desde una WSI `.svs`, usar:
+
+```bash
+python scripts/05_extract_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/wsi_patches/test_tcga_a2_a3xs \
+  --patch-size 1024 \
+  --max-patches 8 \
+  --min-tissue-ratio 0.2 \
+  --thumbnail-size 2048 \
+  --clear-output \
+  --preview-image
+```
+
+El script usa OpenSlide, lee metadata de la WSI, crea un thumbnail, estima una máscara simple de tejido con `mean < 235` y `std > 8`, selecciona coordenadas level 0 de forma reproducible y guarda patches aceptados en `selected/`. También escribe `patches_metadata.csv`, `summary.json` y, si se solicita, `patch_selection_preview.png`.
+
+Este paso solo hace selección y extracción técnica de patches. No corre inferencia, no evalúa calidad, no diagnostica, no calcula RCB y no constituye validación clínica. Los outputs quedan bajo `outputs/` y no deben subirse a Git.
+
+Para correr inferencia sobre un patch generado:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
+  --image-path outputs/wsi_patches/test_tcga_a2_a3xs/selected/patch_0000_x12345_y67890.png \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --output-dir outputs/inference_smoke/test_wsi_patch_0000 \
+  --clear-output
+```
+
 ## Prueba de carga del baseline TIAToolbox
 
 Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:

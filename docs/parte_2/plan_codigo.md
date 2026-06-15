@@ -27,6 +27,8 @@ Confirmar importación de TIAToolbox/OpenSlide y disponibilidad operativa del mo
 
 Implementar extracción de patches sobre imágenes pequeñas, guardar metadatos trazables y filtrar por proporción aproximada de tejido.
 
+Estado inicial: el primer baseline de patching ya permite cortar imágenes pequeñas, calcular `tissue_ratio`, filtrar patches por umbral, guardar metadata CSV, generar un resumen JSON y producir un preview visual de la grilla seleccionada/rechazada. Esto sirve como base reproducible para documentar el flujo y extenderlo luego a WSI reales con OpenSlide/TIAToolbox.
+
 ### 4. BCSS mínimo
 
 Incorporar BCSS como dataset principal de segmentación semántica cuando se definan rutas, permisos y formato de descarga. No se debe subir BCSS al repositorio.

@@ -122,6 +122,36 @@ python scripts/01_check_environment.py
 
 El script revisa importaciones base, disponibilidad de CUDA en PyTorch y existencia de carpetas esperadas.
 
+## Extracción básica de patches
+
+El script de extracción actual está pensado para imágenes pequeñas (`.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`). Todavía no procesa WSI reales ni pirámides gigapixel; esa integración se hará después con TIAToolbox/OpenSlide.
+
+Ejemplo:
+
+```bash
+python scripts/03_extract_patches.py \
+  --image-path /ruta/imagen.tif \
+  --patch-size 256 \
+  --stride 256 \
+  --min-tissue-ratio 0.99 \
+  --output-dir outputs/patches/test_reconstructed \
+  --clear-output \
+  --save-rejected \
+  --preview-image
+```
+
+`--min-tissue-ratio` define la fracción mínima aproximada de tejido para aceptar un patch. Se calcula con un umbral simple contra fondo blanco, por lo que sirve como baseline computacional inicial y no como decisión clínica.
+
+`--clear-output` limpia la carpeta indicada por `--output-dir` antes de correr, con restricciones de seguridad para no borrar `/`, home, la raíz del repo ni carpetas peligrosas. Úsalo solo cuando quieras regenerar una corrida.
+
+La salida incluye:
+
+- `selected/`: patches aceptados;
+- `rejected/`: patches rechazados, solo si se usa `--save-rejected`;
+- `patches_metadata.csv`: todos los patches evaluados, incluyendo coordenadas, `tissue_ratio`, `selected`, `saved` y `split`;
+- `summary.json`: resumen de la corrida;
+- `patch_selection_preview.png`: grilla visual sobre la imagen original si se usa `--preview-image`.
+
 ## Advertencia sobre datos y pesos
 
 No subir al repositorio:

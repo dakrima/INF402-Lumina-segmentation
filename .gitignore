@@ -34,6 +34,11 @@ outputs/*
 !outputs/overlays/
 !outputs/metrics/
 !outputs/figures/
+outputs/patches/*
+outputs/masks/*
+outputs/overlays/*
+outputs/metrics/*
+outputs/figures/*
 !outputs/patches/.gitkeep
 !outputs/masks/.gitkeep
 !outputs/overlays/.gitkeep

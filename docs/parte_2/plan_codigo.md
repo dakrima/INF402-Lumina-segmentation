@@ -35,6 +35,34 @@ python scripts/02_test_tiatoolbox_model.py \
 
 Esta verificación solo confirma carga del baseline preentrenado y genera `outputs/model_checks/tiatoolbox_bcss_model_status.json`. No hace inferencia clínica, no evalúa BCSS, no calcula RCB y no entrena modelos.
 
+#### Troubleshooting macOS: conflicto OpenMP/libomp
+
+En macOS, el smoke test puede abortar con:
+
+```text
+OMP: Error #15: Initializing libomp.dylib, but found libomp.dylib already initialized.
+```
+
+Esto no implica necesariamente que el modelo `fcn_resnet50_unet-bcss` o el código de Lumina estén malos. Normalmente apunta a un conflicto entre runtimes OpenMP cargados por dependencias nativas como PyTorch, TIAToolbox, NumPy, scikit-image u otras.
+
+Workaround probado para una verificación local:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu
+```
+
+Si se quiere reducir paralelismo durante esta prueba:
+
+```bash
+OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu
+```
+
+`KMP_DUPLICATE_LIB_OK=TRUE` debe tratarse como workaround temporal de smoke test local. No usarlo como configuración global sin revisar consecuencias, ni considerarlo solución para experimentos finales, producción o benchmarks. En la corrida exitosa observada se descargaron pesos de aproximadamente `147 MB`; deben quedar cacheados fuera del repositorio y no subirse a Git. El resultado esperado es `Model loaded: OK` y el JSON queda en `outputs/model_checks/tiatoolbox_bcss_model_status.json`.
+
 ### 3. Patching inteligente
 
 Implementar extracción de patches sobre imágenes pequeñas, guardar metadatos trazables y filtrar por proporción aproximada de tejido.

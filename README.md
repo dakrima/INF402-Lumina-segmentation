@@ -188,6 +188,38 @@ El script intenta cargar el modelo preentrenado `fcn_resnet50_unet-bcss`, detect
 
 Esta prueba solo valida carga del baseline. No ejecuta inferencia final, no diagnostica, no calcula RCB, no evalúa BCSS y no constituye validación clínica. Si TIAToolbox necesita descargar pesos para cargar el modelo, el cache debe quedar fuera del repositorio.
 
+### Troubleshooting macOS: conflicto OpenMP/libomp
+
+En macOS puede aparecer un error como:
+
+```text
+OMP: Error #15: Initializing libomp.dylib, but found libomp.dylib already initialized.
+OMP: Hint This means that multiple copies of the OpenMP runtime have been linked into the program...
+zsh: abort
+```
+
+Este error no necesariamente indica un problema del modelo ni del código de Lumina. Suele deberse a un conflicto entre librerías nativas usadas por dependencias como PyTorch, TIAToolbox, NumPy, scikit-image u otras que cargan runtime OpenMP.
+
+Workaround probado para smoke tests locales en Mac:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu
+```
+
+Opcionalmente, para reducir paralelismo:
+
+```bash
+OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu
+```
+
+`KMP_DUPLICATE_LIB_OK=TRUE` es un workaround temporal para pruebas locales, no una solución recomendada para experimentos finales, producción ni benchmarks formales. No lo exportes globalmente en el sistema sin entender las consecuencias.
+
+En la prueba exitosa observada, TIAToolbox descargó pesos de aproximadamente `147 MB` y terminó con `Model loaded: OK`. Esos pesos deben quedar en cache fuera del repositorio y no deben subirse a Git. El estado de la prueba se guarda en `outputs/model_checks/tiatoolbox_bcss_model_status.json`.
+
 ## Advertencia sobre datos y pesos
 
 No subir al repositorio:

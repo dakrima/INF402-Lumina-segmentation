@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 
-CLASS_COLOR_PALETTE: dict[int, tuple[int, int, int]] = {
-    0: (0, 0, 0),
+TIATOOLBOX_BCSS_OUTPUT_CLASS_COLORS: dict[int, tuple[int, int, int]] = {
+    0: (220, 20, 60),
     1: (70, 130, 180),
-    2: (46, 160, 67),
+    2: (60, 179, 113),
     3: (214, 140, 40),
     4: (145, 82, 180),
+}
+CLASS_COLOR_PALETTE: dict[int, tuple[int, int, int]] = {
+    **TIATOOLBOX_BCSS_OUTPUT_CLASS_COLORS,
     5: (210, 70, 70),
     6: (95, 180, 180),
     7: (180, 180, 80),
@@ -63,6 +66,7 @@ def overlay_label_mask(
     rgb_image: Image.Image | np.ndarray,
     mask: np.ndarray,
     alpha: float = 0.45,
+    transparent_label_ids: set[int] | None = None,
 ) -> np.ndarray:
     """Blend a colorized label mask over an RGB image for technical review."""
     if not 0 <= alpha <= 1:
@@ -78,6 +82,66 @@ def overlay_label_mask(
 
     color_mask = colorize_label_mask(label_mask).astype(np.float32)
     output = image[..., :3].astype(np.float32).copy()
-    foreground = label_mask != 0
+    if transparent_label_ids is None:
+        foreground = np.ones(label_mask.shape, dtype=bool)
+    else:
+        foreground = ~np.isin(label_mask, list(transparent_label_ids))
     output[foreground] = (1 - alpha) * output[foreground] + alpha * color_mask[foreground]
     return np.clip(output, 0, 255).astype(np.uint8)
+
+
+def render_class_legend_image(
+    legend: dict,
+    min_width: int = 560,
+    row_height: int = 34,
+) -> Image.Image:
+    """Render a compact visual legend with class ids, names, and pixel ratios."""
+    classes = list(legend.get("classes", []))
+    font = ImageFont.load_default()
+    padding = 16
+    swatch_size = 20
+    header_height = 34
+    width = max(min_width, 420)
+    height = padding * 2 + header_height + max(1, len(classes)) * row_height
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+
+    title = "TIAToolbox BCSS grouped output legend"
+    draw.text((padding, padding), title, fill=(20, 20, 20), font=font)
+    y = padding + header_height
+
+    if not classes:
+        draw.text((padding, y), "No classes found.", fill=(80, 80, 80), font=font)
+        return image
+
+    for item in classes:
+        color = tuple(int(value) for value in item["color_rgb"])
+        class_id = item["class_id"]
+        class_name = item["class_name"]
+        pixel_ratio = float(item.get("pixel_ratio", 0.0))
+        label = f"{class_id:<3} {class_name:<14} {pixel_ratio * 100:6.2f}%"
+
+        draw.rectangle(
+            [padding, y + 6, padding + swatch_size, y + 6 + swatch_size],
+            fill=color,
+            outline=(40, 40, 40),
+        )
+        draw.text((padding + swatch_size + 12, y + 8), label, fill=(20, 20, 20), font=font)
+        y += row_height
+
+    return image
+
+
+def append_legend_to_image(
+    rgb_image: Image.Image | np.ndarray,
+    legend_image: Image.Image,
+) -> Image.Image:
+    """Append a legend image below an RGB image."""
+    base = rgb_image.convert("RGB") if isinstance(rgb_image, Image.Image) else Image.fromarray(rgb_image)
+    legend = legend_image.convert("RGB")
+    width = max(base.width, legend.width)
+    height = base.height + legend.height
+    output = Image.new("RGB", (width, height), "white")
+    output.paste(base, (0, 0))
+    output.paste(legend, (0, base.height))
+    return output

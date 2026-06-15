@@ -236,9 +236,9 @@ KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
   --clear-output
 ```
 
-Esta prueba usa el flujo `SemanticSegmentor` de TIAToolbox y guarda un preview RGB, una máscara coloreada, un overlay y `inference_summary.json` en la carpeta de salida. Es solo un smoke test técnico: no evalúa calidad, no calcula métricas, no calcula RCB, no diagnostica y no constituye validación clínica.
+Esta prueba usa el flujo `SemanticSegmentor` de TIAToolbox y guarda un preview RGB, una máscara coloreada, un overlay, una leyenda visual y `inference_summary.json` en la carpeta de salida. Es solo un smoke test técnico: no evalúa calidad, no calcula métricas, no calcula RCB, no diagnostica y no constituye validación clínica.
 
-El modelo entrega IDs numéricos de clase y los colores son asignados por el script de visualización. La salida incluye `legend.json` con la relación `class_id -> color_rgb -> class_name/status -> pixel_count`. Los nombres de clase solo deben considerarse válidos si `class_mapping_source` aparece confirmado desde TIAToolbox/BCSS; mientras figure como `unconfirmed`, la máscara no debe interpretarse clínicamente.
+El modelo entrega IDs numéricos de clase y los colores son asignados por el script de visualización. La salida incluye `legend.json` y `legend.png` con la relación `class_id -> color_rgb -> class_name/status -> pixel_count`. La paleta visual para demo usa `0 = Tumour` en rojo/crimson `(220, 20, 60)`, `1 = Stroma` en azul, `2 = Inflammatory` en verde, `3 = Necrosis` en naranja y `4 = Others` en morado. Los colores son solo visualización; el significado está dado por `class_id` y el mapping documentado.
 
 ### Importante: BCSS raw vs salida agrupada de TIAToolbox
 

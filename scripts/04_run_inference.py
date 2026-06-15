@@ -88,12 +88,14 @@ def main() -> int:
     print(f"Unique prediction values: {summary.get('unique_prediction_values')}")
     print(f"Class mapping source: {summary.get('class_mapping_source')}")
     print(f"Legend JSON: {summary.get('legend_json')}")
+    print(f"Legend PNG: {summary.get('legend_png')}")
     print(f"Summary JSON: {summary_path}")
 
     if summary["status"] == "completed":
         print(f"Input preview: {summary['outputs']['input_preview']}")
         print(f"Prediction mask: {summary['outputs']['prediction_mask']}")
         print(f"Prediction overlay: {summary['outputs']['prediction_overlay']}")
+        print(f"Overlay with legend: {summary['outputs']['prediction_overlay_with_legend']}")
         for warning in summary.get("warnings", []):
             print(f"Warning: {warning}")
         return 0

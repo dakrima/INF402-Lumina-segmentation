@@ -13,10 +13,12 @@ from PIL import Image
 
 from src.models.tiatoolbox_bcss import DEFAULT_MODEL_NAME, resolve_torch_device
 from src.visualization.segmentation_overlay import (
+    append_legend_to_image,
     colorize_label_mask,
     color_for_class_id,
     normalize_label_mask,
     overlay_label_mask,
+    render_class_legend_image,
     resize_label_mask,
 )
 
@@ -167,6 +169,7 @@ def _summary_base(
         "class_mapping_warning": CLASS_MAPPING_WARNING,
         "raw_bcss_zero_warning": RAW_BCSS_ZERO_WARNING,
         "available_model_classes": {},
+        "available_model_class_colors": {},
         "tiatoolbox_bcss_model_output_mapping": {},
         "bcss_raw_ground_truth_mapping": {
             str(class_id): class_name
@@ -175,6 +178,7 @@ def _summary_base(
         "class_mapping_references": CLASS_MAPPING_REFERENCES,
         "class_pixel_counts": {},
         "legend_json": None,
+        "legend_png": None,
         "tiatoolbox_output": None,
         "tiatoolbox_output_type": None,
         "prediction_source": None,
@@ -182,7 +186,11 @@ def _summary_base(
             "input_preview": str(output_dir / "input_preview.png"),
             "prediction_mask": str(output_dir / "prediction_mask.png"),
             "prediction_overlay": str(output_dir / "prediction_overlay.png"),
+            "prediction_overlay_with_legend": str(
+                output_dir / "prediction_overlay_with_legend.png"
+            ),
             "legend_json": str(output_dir / "legend.json"),
+            "legend_png": str(output_dir / "legend.png"),
         },
         "clinical_warning": CLINICAL_WARNING,
         "error": None,
@@ -479,6 +487,10 @@ def build_class_legend(
         "available_model_classes": {
             str(class_id): class_name for class_id, class_name in sorted(class_names.items())
         },
+        "available_model_class_colors": {
+            str(class_id): list(color_for_class_id(class_id))
+            for class_id in sorted(class_names)
+        },
         "tiatoolbox_bcss_model_output_mapping": (
             {
                 str(class_id): class_name
@@ -764,12 +776,20 @@ def run_inference_smoke_test(
             mapping_source=mapping_source,
             mapping_warning=mapping_warning,
         )
+        legend_png_path = output_dir / "legend.png"
+        overlay_with_legend_path = output_dir / "prediction_overlay_with_legend.png"
+        legend["legend_png"] = str(legend_png_path)
+        legend["prediction_overlay_with_legend"] = str(overlay_with_legend_path)
         legend_path = write_legend_json(legend=legend, output_dir=output_dir)
         summary["class_mapping_source"] = mapping_source
         summary["class_mapping_warning"] = mapping_warning
         summary["raw_bcss_zero_warning"] = RAW_BCSS_ZERO_WARNING
         summary["available_model_classes"] = {
             str(class_id): class_name for class_id, class_name in sorted(class_names.items())
+        }
+        summary["available_model_class_colors"] = {
+            str(class_id): list(color_for_class_id(class_id))
+            for class_id in sorted(class_names)
         }
         if model_name == DEFAULT_MODEL_NAME:
             summary["tiatoolbox_bcss_model_output_mapping"] = {
@@ -778,6 +798,7 @@ def run_inference_smoke_test(
             }
         summary["class_pixel_counts"] = class_pixel_counts
         summary["legend_json"] = str(legend_path)
+        summary["legend_png"] = str(legend_png_path)
 
         visual_mask = label_mask
         if visual_mask.shape != (image_height, image_width):
@@ -791,16 +812,27 @@ def run_inference_smoke_test(
         mask_path = output_dir / "prediction_mask.png"
         Image.fromarray(mask_rgb).save(mask_path)
 
+        legend_image = render_class_legend_image(legend)
+        legend_image.save(legend_png_path)
+
         overlay = overlay_label_mask(rgb_image, visual_mask, alpha=overlay_alpha)
         overlay_path = output_dir / "prediction_overlay.png"
         Image.fromarray(overlay).save(overlay_path)
+
+        overlay_with_legend = append_legend_to_image(
+            rgb_image=Image.fromarray(overlay),
+            legend_image=legend_image,
+        )
+        overlay_with_legend.save(overlay_with_legend_path)
 
         summary["status"] = "completed"
         summary["outputs"] = {
             "input_preview": str(input_preview_path),
             "prediction_mask": str(mask_path),
             "prediction_overlay": str(overlay_path),
+            "prediction_overlay_with_legend": str(overlay_with_legend_path),
             "legend_json": str(legend_path),
+            "legend_png": str(legend_png_path),
         }
         summary["error"] = None
         summary["suggested_next_step"] = (

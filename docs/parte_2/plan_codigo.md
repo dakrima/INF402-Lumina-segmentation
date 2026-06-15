@@ -79,11 +79,11 @@ KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
   --clear-output
 ```
 
-El comando genera `input_preview.png`, `prediction_mask.png`, `prediction_overlay.png`, `legend.json` e `inference_summary.json` bajo `outputs/inference_smoke/test_demo_case_01/`. Esta corrida no evalúa calidad, no calcula Dice/IoU, no calcula RCB, no diagnostica y no valida clínicamente el sistema; solo comprueba que el baseline puede producir una máscara/overlay revisable.
+El comando genera `input_preview.png`, `prediction_mask.png`, `prediction_overlay.png`, `prediction_overlay_with_legend.png`, `legend.json`, `legend.png` e `inference_summary.json` bajo `outputs/inference_smoke/test_demo_case_01/`. Esta corrida no evalúa calidad, no calcula Dice/IoU, no calcula RCB, no diagnostica y no valida clínicamente el sistema; solo comprueba que el baseline puede producir una máscara/overlay revisable.
 
 El script registra en el JSON el modo de entrada, `patch_mode`, tamaño de la imagen, dispositivo usado, versiones de TIAToolbox/PyTorch, clases de modelo/configuración, forma de la predicción, etiquetas observadas, conteos por clase y rutas de salida. Si el tamaño de salida no coincide con el input, el resize se usa únicamente para visualización del overlay.
 
-El modelo devuelve IDs numéricos de clase. Los colores de `prediction_mask.png` y `prediction_overlay.png` son asignados por el script, no necesariamente por el modelo. `legend.json` documenta `class_id -> color_rgb -> class_name/status -> pixel_count`; los nombres solo deben interpretarse si `mapping_source` aparece confirmado desde TIAToolbox/BCSS. Mientras el mapping esté como `unconfirmed`, la máscara sigue siendo una visualización técnica sin interpretación clínica.
+El modelo devuelve IDs numéricos de clase. Los colores de `prediction_mask.png` y `prediction_overlay.png` son asignados por el script, no necesariamente por el modelo. `legend.json` y `legend.png` documentan `class_id -> color_rgb -> class_name/status -> pixel_count`; los nombres solo deben interpretarse si `mapping_source` aparece confirmado desde TIAToolbox/BCSS. La paleta visual para demo muestra `Tumour` en rojo/crimson para evitar confundir la clase `0` con fondo; los colores no agregan significado clínico.
 
 #### Importante: BCSS raw vs salida agrupada de TIAToolbox
 

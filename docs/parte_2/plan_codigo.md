@@ -23,6 +23,18 @@ Crear estructura del repositorio, ambientes Conda/Mamba, `requirements.txt`, `.g
 
 Confirmar importación de TIAToolbox/OpenSlide y disponibilidad operativa del modelo objetivo `fcn_resnet50_unet-bcss`. No descargar pesos grandes automáticamente.
 
+Comando de smoke test:
+
+```bash
+conda activate inf402-lumina-seg
+
+python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device auto
+```
+
+Esta verificación solo confirma carga del baseline preentrenado y genera `outputs/model_checks/tiatoolbox_bcss_model_status.json`. No hace inferencia clínica, no evalúa BCSS, no calcula RCB y no entrena modelos.
+
 ### 3. Patching inteligente
 
 Implementar extracción de patches sobre imágenes pequeñas, guardar metadatos trazables y filtrar por proporción aproximada de tejido.

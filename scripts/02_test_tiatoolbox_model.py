@@ -1,24 +1,48 @@
 #!/usr/bin/env python
-"""Dry-run checks for the future TIAToolbox BCSS baseline."""
+"""Smoke-test loading the TIAToolbox BCSS pretrained segmentation model."""
 
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-TARGET_MODEL_NAME = "fcn_resnet50_unet-bcss"
+from src.models.tiatoolbox_bcss import (  # noqa: E402
+    DEFAULT_MODEL_NAME,
+    DEFAULT_STATUS_JSON,
+    SUPPORTED_DEVICES,
+    build_model_status,
+    write_model_status_json,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Check TIAToolbox import and document the target BCSS baseline.",
+        description=(
+            "Load the TIAToolbox pretrained BCSS model as a reproducible smoke test. "
+            "This script does not run inference, download datasets, or train models."
+        ),
     )
     parser.add_argument(
-        "--image-path",
+        "--model-name",
+        default=DEFAULT_MODEL_NAME,
+        help="TIAToolbox pretrained model name to load.",
+    )
+    parser.add_argument(
+        "--device",
+        choices=sorted(SUPPORTED_DEVICES),
+        default="auto",
+        help="Device selection: auto, cpu, cuda, or mps.",
+    )
+    parser.add_argument(
+        "--output-json",
         type=Path,
-        default=None,
-        help="Optional path to a small image for future inference tests.",
+        default=DEFAULT_STATUS_JSON,
+        help="Path where the model-load status JSON will be written.",
     )
     return parser.parse_args()
 
@@ -26,39 +50,39 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    print("TIAToolbox baseline check")
-    print("=========================")
-    print(f"Target model: {TARGET_MODEL_NAME}")
-    print("This script does not download model weights or datasets.")
+    print("TIAToolbox model smoke test")
+    print("===========================")
+    print(f"Model name: {args.model_name}")
+    print(f"Requested device: {args.device}")
+    print("This script only validates model loading; it does not run inference.")
+    print("Loading pretrained model...")
 
-    try:
-        import tiatoolbox  # noqa: F401
-    except Exception as exc:  # noqa: BLE001 - diagnostic script
-        print(f"[WARN] TIAToolbox import failed: {exc}")
-        tiatoolbox_available = False
+    status = build_model_status(
+        model_name=args.model_name,
+        requested_device=args.device,
+        root_dir=ROOT_DIR,
+    )
+    output_path = write_model_status_json(status, args.output_json)
+
+    print(f"TIAToolbox version: {status.get('tiatoolbox_version')}")
+    print(f"Torch version: {status.get('torch_version')}")
+    print(f"Resolved device: {status.get('resolved_device')}")
+
+    if status["status"] == "loaded":
+        print("Model loaded: OK")
+        print(f"Model class: {status.get('model_class')}")
+        if status.get("ioconfig_class"):
+            print(f"IO config class: {status.get('ioconfig_class')}")
     else:
-        print("[ OK ] TIAToolbox import succeeded.")
-        tiatoolbox_available = True
+        print("Model loaded: FAILED")
+        print(f"Reason: {status.get('error')}")
+        print(f"Suggested next step: {status.get('suggested_next_step')}")
 
-    if args.image_path is None:
-        print("\nNo --image-path was provided.")
-        print("Usage example:")
-        print("  python scripts/02_test_tiatoolbox_model.py --image-path path/to/image.png")
-        print("Real inference remains pending until weights and runtime behavior are verified.")
-        return 0
+    for warning in status.get("warnings", []):
+        print(f"Warning: {warning}")
 
-    if not args.image_path.exists():
-        print(f"[FAIL] Image path does not exist: {args.image_path}")
-        return 1
-
-    if not tiatoolbox_available:
-        print("[FAIL] Cannot proceed with an image because TIAToolbox is unavailable.")
-        return 1
-
-    print(f"Image provided: {args.image_path}")
-    print("Inference is not implemented yet to avoid implicit weight downloads.")
-    print("Pending: verify TIAToolbox model loading and explicit weight handling.")
-    return 0
+    print(f"Status JSON: {output_path}")
+    return 0 if status["status"] == "loaded" else 1
 
 
 if __name__ == "__main__":

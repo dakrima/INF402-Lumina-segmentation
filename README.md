@@ -172,6 +172,22 @@ La salida incluye:
 - `summary.json`: resumen de la corrida, incluyendo cobertura de imagen y cantidad de patches con padding;
 - `patch_selection_preview.png`: grilla visual sobre la imagen original si se usa `--preview-image`.
 
+## Prueba de carga del baseline TIAToolbox
+
+Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:
+
+```bash
+conda activate inf402-lumina-seg
+
+python scripts/02_test_tiatoolbox_model.py \
+  --model-name fcn_resnet50_unet-bcss \
+  --device auto
+```
+
+El script intenta cargar el modelo preentrenado `fcn_resnet50_unet-bcss`, detecta PyTorch y el dispositivo disponible, y escribe un JSON de estado en `outputs/model_checks/tiatoolbox_bcss_model_status.json`.
+
+Esta prueba solo valida carga del baseline. No ejecuta inferencia final, no diagnostica, no calcula RCB, no evalúa BCSS y no constituye validación clínica. Si TIAToolbox necesita descargar pesos para cargar el modelo, el cache debe quedar fuera del repositorio.
+
 ## Advertencia sobre datos y pesos
 
 No subir al repositorio:

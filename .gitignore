@@ -55,7 +55,7 @@ outputs/figures/*
 *.bif
 
 # Models / checkpoints
-models/
+/models/
 *.pt
 *.pth
 *.ckpt

@@ -292,6 +292,23 @@ conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
 
 La salida incluye `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png`, `comparison_preview_selected_only.png` y `comparison_notes.md`. Las métricas cubren conteos, overlap, features recomputadas, diversidad espacial y runtime. Esta etapa no ejecuta modelos ni valida desempeño clínico; para la visualización selected-only puede usar la WSI solo para reconstruir un thumbnail limpio si está disponible.
 
+## Etapa 5 - segmentación sobre patches seleccionados
+
+Después de seleccionar patches, se puede correr segmentación semántica técnica sobre los PNG ya guardados en `selected/`. Esta etapa reutiliza el flujo de inferencia existente y no repite selección de patches:
+
+```bash
+python scripts/08_segment_selected_patches.py \
+  --input-selection-dir outputs/final_patch_selection/baseline_tiatoolbox \
+  --output-dir outputs/segmentation/baseline_tiatoolbox \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --limit-patches 2 \
+  --overwrite
+```
+
+La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
+
 ## Prueba de carga del baseline TIAToolbox
 
 Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:

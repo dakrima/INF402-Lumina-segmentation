@@ -8,10 +8,10 @@ La metodología se mantiene conservadora:
 
 1. validar ambiente;
 2. probar herramientas de lectura e inferencia;
-3. ejecutar patching en imágenes pequeñas;
-4. usar BCSS como dataset técnico de segmentación semántica;
-5. evaluar baseline;
-6. hacer fine-tuning solo si el baseline no basta.
+3. ejecutar patching en imágenes pequeñas y WSI;
+4. formalizar un baseline de selección tipo TIAToolbox;
+5. usar segmentación semántica posterior como validación visual/técnica;
+6. hacer fine-tuning solo si la segmentación posterior no basta.
 
 ## Hitos
 
@@ -138,6 +138,27 @@ KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
   --output-dir outputs/inference_smoke/test_wsi_patch_0000 \
   --clear-output
 ```
+
+### 3.2. Etapa 1 - baseline_tiatoolbox
+
+La primera versión formal de selección de patches queda implementada como arquitectura separada en `src/selection/` y CLI en `scripts/06_select_wsi_patches.py`:
+
+```bash
+python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
+  --selector baseline_tiatoolbox \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --overwrite
+```
+
+Este baseline genera candidatos por grilla, filtra por máscara/proporción de tejido, aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`.
+
+Limitación: todavía no implementa `smart_tissue_nuclei_v1`, señal nuclear, diversidad espacial, ranking inteligente, HoVer-Net, CLAM ni comparación formal. Esa comparación corresponde a la siguiente etapa.
 
 ### 4. BCSS mínimo
 

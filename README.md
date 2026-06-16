@@ -15,7 +15,7 @@ El foco del repositorio es:
 - tissue detection;
 - patch filtering;
 - selección inteligente de patches;
-- segmentación semántica;
+- segmentación semántica posterior;
 - generación de máscaras y overlays;
 - evaluación con métricas de segmentación cuando exista ground truth;
 - posible fine-tuning si el baseline preentrenado no basta.
@@ -37,14 +37,14 @@ Este proyecto no:
 ```text
 WSI / imagen histopatológica H&E
   -> tissue detection
-  -> patches útiles
-  -> baseline preentrenado
-  -> segmentación semántica
-  -> máscara/overlay
-  -> posible fine-tuning
+  -> baseline tipo TIAToolbox: grilla + máscara de tejido + min_mask_ratio
+  -> selector propio de patches
+  -> segmentación semántica posterior
+  -> máscara/overlay revisable
+  -> evaluación técnica y posible adaptación
 ```
 
-La estrategia inicial es probar un baseline preentrenado, idealmente `fcn_resnet50_unet-bcss` documentado en TIAToolbox si se confirma disponibilidad local. Fine-tuning de U-Net/FPN/ResNet50-UNet queda como siguiente paso si el baseline no entrega resultados suficientes. Entrenar desde cero no es la primera opción.
+La estrategia inicial de INF402 es formalizar un baseline de extracción tipo TIAToolbox y compararlo luego contra un selector propio de patches. La segmentación con `fcn_resnet50_unet-bcss` se mantiene como etapa posterior para generar máscaras/overlays revisables. Fine-tuning queda como opción posterior si la segmentación no es suficiente; entrenar desde cero no es la primera opción.
 
 ## Estructura del repositorio
 
@@ -203,6 +203,27 @@ KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
   --output-dir outputs/inference_smoke/test_wsi_patch_0000 \
   --clear-output
 ```
+
+## Etapa 1 - baseline_tiatoolbox
+
+El selector formal de Etapa 1 vive en `scripts/06_select_wsi_patches.py` y genera una corrida reproducible de selección baseline sobre WSI:
+
+```bash
+python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
+  --selector baseline_tiatoolbox \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --overwrite
+```
+
+La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`.
+
+Limitación actual: este baseline no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. El próximo paso técnico es implementar `smart_tissue_nuclei_v1` y compararlo contra este baseline bajo el mismo presupuesto de patches.
 
 ## Prueba de carga del baseline TIAToolbox
 

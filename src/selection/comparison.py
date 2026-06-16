@@ -1,8 +1,9 @@
-"""Compare patch selector outputs without opening WSI or running models."""
+"""Compare patch selector outputs without running models."""
 
 from __future__ import annotations
 
 import csv
+import importlib
 import json
 import math
 import shutil
@@ -58,6 +59,8 @@ COMPARISON_SELECTED_PATCH_FIELDS = [
     "tissue_ratio_metadata",
     "tissue_ratio_recomputed",
     "nuclear_signal_recomputed",
+    "nuclear_signal_rgb_recomputed",
+    "nuclear_signal_hed_recomputed",
     "visual_entropy_recomputed",
     "blur_score_recomputed",
     "artifact_penalty_recomputed",
@@ -215,6 +218,11 @@ def _to_int(value: object) -> int | None:
 
 def _candidate_key_from_xy(x_level0: object, y_level0: object) -> str:
     return f"x{int(float(x_level0))}_y{int(float(y_level0))}"
+
+
+def _selector_title(run: SelectorRun) -> str:
+    selector = run.summary.get("selector") or run.method_config.get("selector")
+    return str(selector or run.label)
 
 
 def _candidate_lookup_by_xy(candidate_rows: list[dict[str, str]]) -> dict[tuple[int, int], str]:
@@ -400,6 +408,8 @@ def recompute_selected_patch_features(
             "tissue_ratio_metadata": record["tissue_ratio_metadata"],
             "tissue_ratio_recomputed": "",
             "nuclear_signal_recomputed": "",
+            "nuclear_signal_rgb_recomputed": "",
+            "nuclear_signal_hed_recomputed": "",
             "visual_entropy_recomputed": "",
             "blur_score_recomputed": "",
             "artifact_penalty_recomputed": "",
@@ -412,17 +422,25 @@ def recompute_selected_patch_features(
             if not patch_path.exists():
                 raise FileNotFoundError(f"Missing selected patch PNG: {patch_path}")
             with Image.open(patch_path) as image:
-                features = compute_patch_features(
+                features_rgb = compute_patch_features(
                     rgb_patch=image.convert("RGB"),
                     feature_size=feature_size,
+                    nuclear_proxy="rgb_purple",
+                )
+                features_hed = compute_patch_features(
+                    rgb_patch=image.convert("RGB"),
+                    feature_size=feature_size,
+                    nuclear_proxy="hed_deconvolution",
                 )
             output_row.update(
                 {
-                    "tissue_ratio_recomputed": f"{features['tissue_ratio']:.6f}",
-                    "nuclear_signal_recomputed": f"{features['nuclear_signal']:.6f}",
-                    "visual_entropy_recomputed": f"{features['visual_entropy']:.6f}",
-                    "blur_score_recomputed": f"{features['blur_score']:.6f}",
-                    "artifact_penalty_recomputed": f"{features['artifact_penalty']:.6f}",
+                    "tissue_ratio_recomputed": f"{features_rgb['tissue_ratio']:.6f}",
+                    "nuclear_signal_recomputed": f"{features_rgb['nuclear_signal']:.6f}",
+                    "nuclear_signal_rgb_recomputed": f"{features_rgb['nuclear_signal']:.6f}",
+                    "nuclear_signal_hed_recomputed": f"{features_hed['nuclear_signal']:.6f}",
+                    "visual_entropy_recomputed": f"{features_rgb['visual_entropy']:.6f}",
+                    "blur_score_recomputed": f"{features_rgb['blur_score']:.6f}",
+                    "artifact_penalty_recomputed": f"{features_rgb['artifact_penalty']:.6f}",
                 }
             )
         rows.append(output_row)
@@ -551,6 +569,8 @@ def build_comparison_metrics_rows(
         "num_candidates_evaluated",
         "num_candidates_scored",
         "num_selected",
+        "regions_covered",
+        "active_regions",
     ]
     for metric in count_metrics:
         rows.append(
@@ -572,6 +592,35 @@ def build_comparison_metrics_rows(
         )
     )
     for metric in [
+        "quota_fill_rate",
+        "mean_feature_diversity_bonus_selected",
+    ]:
+        rows.append(
+            _metric_row(
+                metric,
+                baseline.summary.get(metric),
+                smart.summary.get(metric),
+                higher_is_better=True,
+                interpretation=(
+                    "Selector-specific diversity or quota metric; compare only when present."
+                ),
+            )
+        )
+    for metric in [
+        "nuclear_proxy",
+        "spatial_strategy",
+        "diversity_strategy",
+    ]:
+        rows.append(
+            _metric_row(
+                metric,
+                baseline.summary.get(metric, ""),
+                smart.summary.get(metric, ""),
+                higher_is_better=None,
+                interpretation="Selector configuration field; descriptive only.",
+            )
+        )
+    for metric in [
         "num_overlap_selected",
         "overlap_ratio_baseline",
         "overlap_ratio_smart",
@@ -590,7 +639,21 @@ def build_comparison_metrics_rows(
 
     feature_specs = [
         ("tissue_ratio_recomputed", True, "Higher tissue fraction may indicate less empty background."),
-        ("nuclear_signal_recomputed", True, "Higher proxy signal may indicate more hematoxylin-rich regions."),
+        (
+            "nuclear_signal_recomputed",
+            True,
+            "Legacy RGB nuclear proxy kept for backward compatibility.",
+        ),
+        (
+            "nuclear_signal_rgb_recomputed",
+            True,
+            "Higher RGB proxy signal may indicate more purple-blue, hematoxylin-like regions.",
+        ),
+        (
+            "nuclear_signal_hed_recomputed",
+            True,
+            "Higher HED proxy signal may indicate stronger stain-based hematoxylin signal.",
+        ),
         ("visual_entropy_recomputed", True, "Higher entropy may indicate richer visual variation."),
         ("blur_score_recomputed", True, "Higher gradient variance may indicate sharper texture."),
         ("artifact_penalty_recomputed", False, "Lower artifact penalty is preferable."),
@@ -603,6 +666,19 @@ def build_comparison_metrics_rows(
                 feature_metrics["smart"][feature_name]["mean"],
                 higher_is_better=higher_is_better,
                 interpretation=interpretation,
+            )
+        )
+    for feature_name in [
+        "nuclear_signal_rgb_recomputed",
+        "nuclear_signal_hed_recomputed",
+    ]:
+        rows.append(
+            _metric_row(
+                f"median_{feature_name}",
+                feature_metrics["baseline"][feature_name]["median"],
+                feature_metrics["smart"][feature_name]["median"],
+                higher_is_better=True,
+                interpretation="Median selected-patch nuclear proxy; heuristic only.",
             )
         )
 
@@ -636,8 +712,13 @@ def build_interpretation(
     smart_features = feature_metrics["smart"]
     smart_tissue = smart_features["tissue_ratio_recomputed"]["mean"]
     baseline_tissue = baseline_features["tissue_ratio_recomputed"]["mean"]
-    smart_nuclear = smart_features["nuclear_signal_recomputed"]["mean"]
-    baseline_nuclear = baseline_features["nuclear_signal_recomputed"]["mean"]
+    nuclear_feature = (
+        "nuclear_signal_hed_recomputed"
+        if "nuclear_signal_hed_recomputed" in smart_features
+        else "nuclear_signal_recomputed"
+    )
+    smart_nuclear = smart_features[nuclear_feature]["mean"]
+    baseline_nuclear = baseline_features[nuclear_feature]["mean"]
     smart_artifact = smart_features["artifact_penalty_recomputed"]["mean"]
     baseline_artifact = baseline_features["artifact_penalty_recomputed"]["mean"]
     smart_nn = spatial_metrics["smart"].get("mean_nearest_neighbor_distance")
@@ -646,6 +727,7 @@ def build_interpretation(
     notes = [
         "Metrics are heuristic and technical; they do not imply diagnosis or clinical validation.",
         "Recomputed features use only selected PNG patches and feature_size, not the full WSI.",
+        "nuclear_signal_recomputed is the legacy RGB proxy; RGB and HED proxies are also reported explicitly.",
     ]
     if smart_nuclear is not None and baseline_nuclear is not None and smart_nuclear > baseline_nuclear:
         notes.append("Smart selector chose patches with higher mean nuclear-signal proxy.")
@@ -672,6 +754,155 @@ def build_interpretation(
     }
 
 
+def _format_float(value: object, digits: int = 3) -> str:
+    number = _to_float(value)
+    if number is None:
+        return "n/a"
+    return f"{number:.{digits}f}"
+
+
+def _feature_mean(
+    feature_metrics: dict[str, Any],
+    method: str,
+    feature_name: str,
+) -> float | None:
+    return feature_metrics.get(method, {}).get(feature_name, {}).get("mean")
+
+
+def _preview_nuclear_feature(feature_metrics: dict[str, Any]) -> tuple[str, str]:
+    if "nuclear_signal_hed_recomputed" in feature_metrics.get("smart", {}):
+        return "nuclear_signal_hed_recomputed", "mean nuclear HED"
+    return "nuclear_signal_recomputed", "mean nuclear"
+
+
+def _preview_footer_lines(
+    overlap_metrics: dict[str, Any],
+    feature_metrics: dict[str, Any],
+) -> list[str]:
+    nuclear_feature, nuclear_label = _preview_nuclear_feature(feature_metrics)
+    baseline_features = feature_metrics["baseline"]
+    smart_features = feature_metrics["smart"]
+    return [
+        (
+            f"selected baseline/smart: {overlap_metrics['num_selected_baseline']} / "
+            f"{overlap_metrics['num_selected_smart']} | overlap: "
+            f"{overlap_metrics['num_overlap_selected']} | jaccard: "
+            f"{_format_float(overlap_metrics['jaccard_selected'])}"
+        ),
+        (
+            "mean tissue: "
+            f"{_format_float(baseline_features['tissue_ratio_recomputed']['mean'])} / "
+            f"{_format_float(smart_features['tissue_ratio_recomputed']['mean'])} | "
+            f"{nuclear_label}: "
+            f"{_format_float(_feature_mean(feature_metrics, 'baseline', nuclear_feature))} / "
+            f"{_format_float(_feature_mean(feature_metrics, 'smart', nuclear_feature))} | "
+            "mean artifact: "
+            f"{_format_float(baseline_features['artifact_penalty_recomputed']['mean'])} / "
+            f"{_format_float(smart_features['artifact_penalty_recomputed']['mean'])}"
+        ),
+    ]
+
+
+def _resize_to_height(image: Image.Image, height: int) -> Image.Image:
+    ratio = height / image.height
+    width = max(1, int(round(image.width * ratio)))
+    return image.resize((width, height), getattr(Image, "Resampling", Image).BILINEAR)
+
+
+def _slide_dimensions(run: SelectorRun, records: list[dict[str, object]]) -> tuple[float, float]:
+    slide_width = _to_float(run.summary.get("slide_width"))
+    slide_height = _to_float(run.summary.get("slide_height"))
+    if slide_width and slide_height:
+        return slide_width, slide_height
+
+    selected_widths = [
+        _to_float(row.get("slide_width")) for row in (record.get("source_row", {}) for record in records)
+    ]
+    selected_heights = [
+        _to_float(row.get("slide_height")) for row in (record.get("source_row", {}) for record in records)
+    ]
+    slide_width = next((value for value in selected_widths if value), None)
+    slide_height = next((value for value in selected_heights if value), None)
+    if slide_width and slide_height:
+        return slide_width, slide_height
+
+    max_x = max(
+        (
+            float(record["x_level0"]) + float(record.get("patch_size") or 0)
+            for record in records
+        ),
+        default=1.0,
+    )
+    max_y = max(
+        (
+            float(record["y_level0"]) + float(record.get("patch_size") or 0)
+            for record in records
+        ),
+        default=1.0,
+    )
+    return max(max_x, 1.0), max(max_y, 1.0)
+
+
+def _blank_slide_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -> Image.Image:
+    slide_width, slide_height = _slide_dimensions(run, records)
+    thumbnail_max_size = (
+        _to_int(run.summary.get("thumbnail_max_size"))
+        or _to_int(run.method_config.get("thumbnail_max_size"))
+        or 2048
+    )
+    scale = thumbnail_max_size / max(slide_width, slide_height, 1.0)
+    width = max(1, int(round(slide_width * scale)))
+    height = max(1, int(round(slide_height * scale)))
+    image = Image.new("RGB", (width, height), (248, 248, 248))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, width - 1, height - 1), outline=(190, 190, 190), width=2)
+    draw.text((12, 12), "thumbnail unavailable", fill=(80, 80, 80), font=ImageFont.load_default())
+    return image
+
+
+def _load_clean_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -> Image.Image:
+    wsi_path = run.summary.get("wsi_path") or run.method_config.get("wsi_path")
+    if wsi_path:
+        resolved_wsi_path = Path(str(wsi_path)).expanduser()
+        if resolved_wsi_path.exists():
+            thumbnail_max_size = (
+                _to_int(run.summary.get("thumbnail_max_size"))
+                or _to_int(run.method_config.get("thumbnail_max_size"))
+                or 2048
+            )
+            try:
+                openslide = importlib.import_module("openslide")
+                slide = openslide.OpenSlide(str(resolved_wsi_path))
+                try:
+                    return slide.get_thumbnail((thumbnail_max_size, thumbnail_max_size)).convert("RGB")
+                finally:
+                    close = getattr(slide, "close", None)
+                    if close:
+                        close()
+            except Exception:
+                pass
+    return _blank_slide_thumbnail(run, records)
+
+
+def _draw_selected_boxes_on_thumbnail(
+    thumbnail: Image.Image,
+    run: SelectorRun,
+    records: list[dict[str, object]],
+) -> Image.Image:
+    slide_width, slide_height = _slide_dimensions(run, records)
+    scale_x = thumbnail.width / max(slide_width, 1.0)
+    scale_y = thumbnail.height / max(slide_height, 1.0)
+    draw = ImageDraw.Draw(thumbnail)
+    for record in records:
+        x0 = float(record["x_level0"]) * scale_x
+        y0 = float(record["y_level0"]) * scale_y
+        patch_size = float(record.get("patch_size") or run.summary.get("patch_size") or 0)
+        x1 = (float(record["x_level0"]) + patch_size) * scale_x
+        y1 = (float(record["y_level0"]) + patch_size) * scale_y
+        draw.rectangle((x0, y0, x1, y1), outline=(0, 170, 70), width=4)
+    return thumbnail
+
+
 def save_comparison_preview(
     baseline: SelectorRun,
     smart: SelectorRun,
@@ -691,13 +922,8 @@ def save_comparison_preview(
     with Image.open(smart.directory / "patch_selection_preview.png") as smart_image:
         smart_preview = smart_image.convert("RGB")
 
-    def resize_to_height(image: Image.Image, height: int) -> Image.Image:
-        ratio = height / image.height
-        width = max(1, int(round(image.width * ratio)))
-        return image.resize((width, height), getattr(Image, "Resampling", Image).BILINEAR)
-
-    baseline_preview = resize_to_height(baseline_preview, target_height)
-    smart_preview = resize_to_height(smart_preview, target_height)
+    baseline_preview = _resize_to_height(baseline_preview, target_height)
+    smart_preview = _resize_to_height(smart_preview, target_height)
 
     width = baseline_preview.width + smart_preview.width + padding * 3
     height = title_height + target_height + footer_height + padding * 2
@@ -710,32 +936,63 @@ def save_comparison_preview(
     image_y = title_height
     canvas.paste(baseline_preview, (baseline_x, image_y))
     canvas.paste(smart_preview, (smart_x, image_y))
-    draw.text((baseline_x, 20), "baseline_tiatoolbox", fill=(20, 20, 20), font=font)
-    draw.text((smart_x, 20), "smart_tissue_nuclei_v1", fill=(20, 20, 20), font=font)
+    draw.text((baseline_x, 20), _selector_title(baseline), fill=(20, 20, 20), font=font)
+    draw.text((smart_x, 20), _selector_title(smart), fill=(20, 20, 20), font=font)
 
-    baseline_features = feature_metrics["baseline"]
-    smart_features = feature_metrics["smart"]
     footer_y = image_y + target_height + padding
-    lines = [
-        (
-            f"selected baseline/smart: {overlap_metrics['num_selected_baseline']} / "
-            f"{overlap_metrics['num_selected_smart']} | overlap: "
-            f"{overlap_metrics['num_overlap_selected']} | jaccard: "
-            f"{overlap_metrics['jaccard_selected']:.3f}"
-        ),
-        (
-            "mean tissue: "
-            f"{baseline_features['tissue_ratio_recomputed']['mean']:.3f} / "
-            f"{smart_features['tissue_ratio_recomputed']['mean']:.3f} | "
-            "mean nuclear: "
-            f"{baseline_features['nuclear_signal_recomputed']['mean']:.3f} / "
-            f"{smart_features['nuclear_signal_recomputed']['mean']:.3f} | "
-            "mean artifact: "
-            f"{baseline_features['artifact_penalty_recomputed']['mean']:.3f} / "
-            f"{smart_features['artifact_penalty_recomputed']['mean']:.3f}"
-        ),
-    ]
-    for index, line in enumerate(lines):
+    for index, line in enumerate(_preview_footer_lines(overlap_metrics, feature_metrics)):
+        draw.text((padding, footer_y + index * 22), line, fill=(20, 20, 20), font=font)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(output_path)
+    return output_path
+
+
+def save_selected_only_comparison_preview(
+    baseline: SelectorRun,
+    smart: SelectorRun,
+    output_path: Path,
+    *,
+    baseline_records: list[dict[str, object]],
+    smart_records: list[dict[str, object]],
+    overlap_metrics: dict[str, Any],
+    feature_metrics: dict[str, Any],
+) -> Path:
+    """Create a cleaner side-by-side preview with selected patches only."""
+    target_height = 760
+    title_height = 56
+    footer_height = 100
+    padding = 20
+
+    baseline_preview = _draw_selected_boxes_on_thumbnail(
+        _load_clean_thumbnail(baseline, baseline_records),
+        baseline,
+        baseline_records,
+    )
+    smart_preview = _draw_selected_boxes_on_thumbnail(
+        _load_clean_thumbnail(smart, smart_records),
+        smart,
+        smart_records,
+    )
+    baseline_preview = _resize_to_height(baseline_preview, target_height)
+    smart_preview = _resize_to_height(smart_preview, target_height)
+
+    width = baseline_preview.width + smart_preview.width + padding * 3
+    height = title_height + target_height + footer_height + padding * 2
+    canvas = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(canvas)
+    font = ImageFont.load_default()
+
+    baseline_x = padding
+    smart_x = baseline_x + baseline_preview.width + padding
+    image_y = title_height
+    canvas.paste(baseline_preview, (baseline_x, image_y))
+    canvas.paste(smart_preview, (smart_x, image_y))
+    draw.text((baseline_x, 20), _selector_title(baseline), fill=(20, 20, 20), font=font)
+    draw.text((smart_x, 20), _selector_title(smart), fill=(20, 20, 20), font=font)
+
+    footer_y = image_y + target_height + padding
+    for index, line in enumerate(_preview_footer_lines(overlap_metrics, feature_metrics)):
         draw.text((padding, footer_y + index * 22), line, fill=(20, 20, 20), font=font)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -747,12 +1004,22 @@ def write_comparison_notes(
     output_path: Path,
     interpretation: dict[str, Any],
     warnings: list[str],
+    *,
+    smart_selector: str,
+    smart_summary: dict[str, Any],
 ) -> Path:
     warning_lines = "\n".join(f"- {warning}" for warning in warnings) or "- None"
     note_lines = "\n".join(f"- {note}" for note in interpretation["notes"])
+    spatial_strategy = smart_summary.get("spatial_strategy") or "not reported"
     body = f"""# Patch Selector Comparison Notes
 
 This comparison is technical only. It does not diagnose, calculate RCB, replace a pathologist, or validate clinical performance.
+
+The smart selector compared here is: `{smart_selector}`.
+
+The comparison reports both RGB and HED nuclear proxies when available. HED is a stain-based heuristic, not nuclear segmentation.
+
+Spatial quota metrics are reported when the smart selector uses spatial quotas. Smart spatial strategy reported by the run: `{spatial_strategy}`.
 
 ## Interpretation
 
@@ -813,6 +1080,8 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
     feature_names = [
         "tissue_ratio_recomputed",
         "nuclear_signal_recomputed",
+        "nuclear_signal_rgb_recomputed",
+        "nuclear_signal_hed_recomputed",
         "visual_entropy_recomputed",
         "blur_score_recomputed",
         "artifact_penalty_recomputed",
@@ -851,6 +1120,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
     selected_overlap_path = output_dir / "selected_overlap.csv"
     selected_patches_path = output_dir / "comparison_selected_patches.csv"
     preview_path = output_dir / "comparison_preview.png"
+    selected_only_preview_path = output_dir / "comparison_preview_selected_only.png"
     summary_path = output_dir / "comparison_summary.json"
     notes_path = output_dir / "comparison_notes.md"
 
@@ -864,7 +1134,22 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         overlap_metrics=overlap_metrics,
         feature_metrics=feature_metrics,
     )
-    write_comparison_notes(notes_path, interpretation, validation_warnings)
+    save_selected_only_comparison_preview(
+        baseline,
+        smart,
+        selected_only_preview_path,
+        baseline_records=baseline_records,
+        smart_records=smart_records,
+        overlap_metrics=overlap_metrics,
+        feature_metrics=feature_metrics,
+    )
+    write_comparison_notes(
+        notes_path,
+        interpretation,
+        validation_warnings,
+        smart_selector=_selector_title(smart),
+        smart_summary=smart.summary,
+    )
 
     summary = {
         "baseline_dir": str(baseline_dir),
@@ -877,6 +1162,11 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         "smart_summary": smart.summary,
         "overlap_metrics": overlap_metrics,
         "feature_metrics": feature_metrics,
+        "feature_metric_notes": {
+            "nuclear_signal_recomputed": "Legacy RGB purple/hematoxylin proxy kept for backward compatibility.",
+            "nuclear_signal_rgb_recomputed": "Explicit RGB purple/hematoxylin proxy recomputed on selected PNGs.",
+            "nuclear_signal_hed_recomputed": "Explicit HED stain-deconvolution heuristic recomputed on selected PNGs; not nuclear segmentation.",
+        },
         "spatial_metrics": spatial_metrics,
         "runtime_metrics": runtime_metrics,
         "interpretation": interpretation,
@@ -886,6 +1176,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
             "selected_overlap_csv": str(selected_overlap_path),
             "comparison_selected_patches_csv": str(selected_patches_path),
             "comparison_preview_png": str(preview_path),
+            "comparison_preview_selected_only_png": str(selected_only_preview_path),
             "comparison_notes_md": str(notes_path),
         },
         "clinical_warning": CLINICAL_WARNING,

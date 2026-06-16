@@ -247,6 +247,34 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 `--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. El siguiente paso es comparar formalmente `baseline_tiatoolbox` contra `smart_tissue_nuclei_v1` con el mismo pool y presupuesto de patches.
 
+## Etapa 2.1 - smart_tissue_nuclei_v2_light
+
+`smart_tissue_nuclei_v2_light` mejora el selector propio con tres mecanismos livianos: proxy nuclear por HED color deconvolution, cuotas espaciales suaves por región y diversidad simple por features. Mantiene el mismo pool thumbnail-filtered y no usa modelos deep learning.
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/smart_v2_light_tcga_a2_a3xs \
+  --selector smart_tissue_nuclei_v2_light \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 500 \
+  --feature-size 256 \
+  --lambda-spatial 0.15 \
+  --nuclear-proxy hed_deconvolution \
+  --spatial-strategy quotas \
+  --quota-grid 4x4 \
+  --quota-min-score-quantile 0.25 \
+  --diversity-strategy farthest_feature \
+  --feature-diversity-weight 0.10 \
+  --overwrite
+```
+
+Los outputs agregan trazabilidad de `nuclear_proxy`, región espacial, cuotas y `feature_diversity_bonus`. Las cuotas son suaves: evitan concentrar la selección en pocas zonas, pero no obligan a elegir patches de bajo score solo para llenar una región.
+
 ## Etapa 3 - comparación de selectores
 
 La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados:

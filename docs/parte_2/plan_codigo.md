@@ -158,7 +158,7 @@ python scripts/06_select_wsi_patches.py \
 
 Este baseline genera candidatos por grilla, filtra por máscara/proporción de tejido, aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` representa el pool común filtrado por thumbnail; `selected_metadata.csv` contiene solo los patches finalmente seleccionados.
 
-Limitación: todavía no implementa `smart_tissue_nuclei_v1`, señal nuclear, diversidad espacial, ranking inteligente, HoVer-Net, CLAM ni comparación formal. Esa comparación corresponde a la siguiente etapa usando el mismo pool de candidatos y el mismo presupuesto de patches.
+Limitación: este baseline no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni comparación formal por sí solo. Es el punto de referencia para comparar selectores propios bajo el mismo pool de candidatos y presupuesto de patches.
 
 ### 3.3. Etapa 2 - smart_tissue_nuclei_v1
 
@@ -182,7 +182,35 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 El flujo es memory-safe para CPU: no carga la WSI completa, no guarda todos los patches en memoria, lee candidatos uno por uno y calcula features sobre patches reducidos. `candidate_metadata.csv` conserva todo el pool; solo los candidatos scoreados tienen columnas de features completas. El siguiente hito es una comparación formal baseline vs selector propio con métricas de cobertura, redundancia, diversidad y costo.
 
-### 3.4. Etapa 3 - comparación baseline vs smart_tissue_nuclei_v1
+### 3.4. Etapa 2.1 - smart_tissue_nuclei_v2_light
+
+`smart_tissue_nuclei_v2_light` conserva el flujo memory-safe y agrega HED color deconvolution como proxy hematoxilina/nuclear, cuotas espaciales suaves y diversidad por features simples.
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/smart_v2_light_tcga_a2_a3xs \
+  --selector smart_tissue_nuclei_v2_light \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 500 \
+  --feature-size 256 \
+  --lambda-spatial 0.15 \
+  --nuclear-proxy hed_deconvolution \
+  --spatial-strategy quotas \
+  --quota-grid 4x4 \
+  --quota-min-score-quantile 0.25 \
+  --diversity-strategy farthest_feature \
+  --feature-diversity-weight 0.10 \
+  --overwrite
+```
+
+Las cuotas son suaves: seleccionan desde regiones activas sin forzar patches de bajo score. Esta etapa no ejecuta segmentación, fine-tuning, HoVer-Net ni modelos deep learning.
+
+### 3.5. Etapa 3 - comparación baseline vs smart_tissue_nuclei_v1/v2_light
 
 La comparación formal usa outputs existentes de ambos selectores y no abre la WSI. Valida configuración compartida, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula diversidad espacial.
 

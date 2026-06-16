@@ -14,7 +14,11 @@ from src.preprocessing.wsi_patch_extraction import (
     _import_openslide,
 )
 from src.selection.candidate_generation import PatchCandidate, generate_tissue_candidates
-from src.selection.diversity import greedy_select_with_spatial_penalty
+from src.selection.diversity import (
+    assign_spatial_regions,
+    greedy_select_with_spatial_penalty,
+    select_with_spatial_quotas,
+)
 from src.selection.manifests import (
     CANDIDATE_METADATA_FIELDS,
     SELECTED_METADATA_FIELDS,
@@ -25,11 +29,11 @@ from src.selection.manifests import (
 from src.selection.quality_filters import (
     ARTIFACT_PENALTY_METHOD,
     BLUR_SCORE_METHOD,
-    NUCLEAR_SIGNAL_METHOD,
     VISUAL_ENTROPY_METHOD,
     compute_patch_features,
+    nuclear_signal_method_for_proxy,
 )
-from src.selection.scoring import DEFAULT_SMART_WEIGHTS, apply_feature_scores
+from src.selection.scoring import DEFAULT_SMART_WEIGHTS, apply_feature_scores, normalize_feature
 from src.selection.previews import save_wsi_patch_selection_preview
 from src.selection.tiatoolbox_baseline import (
     CANDIDATE_METADATA_SEMANTICS,
@@ -42,8 +46,20 @@ from src.selection.tiatoolbox_baseline import (
 
 
 SMART_SELECTOR_NAME = "smart_tissue_nuclei_v1"
+SMART_V2_LIGHT_SELECTOR_NAME = "smart_tissue_nuclei_v2_light"
+SUPPORTED_SMART_SELECTORS = {SMART_SELECTOR_NAME, SMART_V2_LIGHT_SELECTOR_NAME}
 CANDIDATE_ORDERING = "thumbnail_filtered_seeded_shuffle_then_feature_score"
 PREVIEW_SHOWS = "selected_or_scored_candidates"
+FEATURE_DIVERSITY_FIELDS = [
+    "tissue_ratio_norm",
+    "nuclear_signal_norm",
+    "visual_entropy_norm",
+    "blur_score_norm",
+    "artifact_penalty_norm",
+    "x_norm",
+    "y_norm",
+    "thumbnail_tissue_ratio_norm",
+]
 
 
 @dataclass(frozen=True)
@@ -65,13 +81,19 @@ class SmartTissueNucleiConfig:
     feature_size: int = 256
     lambda_spatial: float = 0.15
     min_distance_level0: int | None = None
+    nuclear_proxy: str = "rgb_purple"
+    spatial_strategy: str = "penalty"
+    quota_grid: str = "4x4"
+    quota_min_score_quantile: float = 0.25
+    diversity_strategy: str = "none"
+    feature_diversity_weight: float = 0.10
 
 
 def _validate_config(config: SmartTissueNucleiConfig, wsi_path: Path) -> None:
-    if config.selector != SMART_SELECTOR_NAME:
+    if config.selector not in SUPPORTED_SMART_SELECTORS:
         raise NotImplementedError(
             f"Selector '{config.selector}' todavía no está implementado. "
-            f"Esta etapa soporta {SMART_SELECTOR_NAME}."
+            "Esta etapa soporta: " + ", ".join(sorted(SUPPORTED_SMART_SELECTORS))
         )
     if config.patch_size <= 0:
         raise ValueError("--patch-size must be positive.")
@@ -91,6 +113,16 @@ def _validate_config(config: SmartTissueNucleiConfig, wsi_path: Path) -> None:
         raise ValueError("--lambda-spatial must be >= 0.")
     if config.min_distance_level0 is not None and config.min_distance_level0 <= 0:
         raise ValueError("--min-distance-level0 must be positive when provided.")
+    if config.nuclear_proxy not in {"rgb_purple", "hed_deconvolution"}:
+        raise ValueError("--nuclear-proxy must be rgb_purple or hed_deconvolution.")
+    if config.spatial_strategy not in {"penalty", "quotas"}:
+        raise ValueError("--spatial-strategy must be penalty or quotas.")
+    if not 0 <= config.quota_min_score_quantile <= 1:
+        raise ValueError("--quota-min-score-quantile must be between 0 and 1.")
+    if config.diversity_strategy not in {"none", "farthest_feature"}:
+        raise ValueError("--diversity-strategy must be none or farthest_feature.")
+    if config.feature_diversity_weight < 0:
+        raise ValueError("--feature-diversity-weight must be >= 0.")
     if wsi_path.suffix.lower() not in SUPPORTED_WSI_EXTENSIONS:
         allowed = ", ".join(sorted(SUPPORTED_WSI_EXTENSIONS))
         raise ValueError(f"Unsupported WSI extension '{wsi_path.suffix}'. Use one of: {allowed}.")
@@ -132,14 +164,22 @@ def _candidate_pool_row(
         "thumbnail_tissue_ratio": _format_float(candidate.thumbnail_tissue_ratio),
         "evaluated": False,
         "scored": False,
+        "nuclear_proxy": config.nuclear_proxy,
         "tissue_ratio": "",
         "nuclear_signal": "",
         "visual_entropy": "",
         "blur_score": "",
         "artifact_penalty": "",
         "spatial_penalty": "",
+        "feature_diversity_bonus": "",
         "score_raw": "",
         "score_final": "",
+        "region_id": "",
+        "region_row": "",
+        "region_col": "",
+        "quota_grid": config.quota_grid if config.spatial_strategy == "quotas" else "",
+        "spatial_strategy": config.spatial_strategy,
+        "diversity_strategy": config.diversity_strategy,
         "selected": False,
         "rank": "",
         "filename": "",
@@ -169,8 +209,16 @@ def _selected_row(candidate_row: dict[str, object]) -> dict[str, object]:
         "blur_score": candidate_row["blur_score"],
         "artifact_penalty": candidate_row["artifact_penalty"],
         "spatial_penalty": candidate_row["spatial_penalty"],
+        "feature_diversity_bonus": candidate_row["feature_diversity_bonus"],
         "score_raw": candidate_row["score_raw"],
         "score_final": candidate_row["score_final"],
+        "nuclear_proxy": candidate_row["nuclear_proxy"],
+        "region_id": candidate_row["region_id"],
+        "region_row": candidate_row["region_row"],
+        "region_col": candidate_row["region_col"],
+        "quota_grid": candidate_row["quota_grid"],
+        "spatial_strategy": candidate_row["spatial_strategy"],
+        "diversity_strategy": candidate_row["diversity_strategy"],
         "source_wsi_path": candidate_row["source_wsi_path"],
         "slide_width": candidate_row["slide_width"],
         "slide_height": candidate_row["slide_height"],
@@ -202,10 +250,16 @@ def _method_config(
         "feature_size": config.feature_size,
         "max_candidates_to_score": config.max_candidates_to_score,
         "weights": DEFAULT_SMART_WEIGHTS,
+        "nuclear_proxy": config.nuclear_proxy,
+        "nuclear_signal_method": nuclear_signal_method_for_proxy(config.nuclear_proxy),
+        "spatial_strategy": config.spatial_strategy,
         "lambda_spatial": config.lambda_spatial,
         "min_distance_level0": min_distance_level0,
+        "quota_grid": config.quota_grid,
+        "quota_min_score_quantile": config.quota_min_score_quantile,
+        "diversity_strategy": config.diversity_strategy,
+        "feature_diversity_weight": config.feature_diversity_weight,
         "tissue_mask_method": TISSUE_MASK_METHOD,
-        "nuclear_signal_method": NUCLEAR_SIGNAL_METHOD,
         "visual_entropy_method": VISUAL_ENTROPY_METHOD,
         "blur_score_method": BLUR_SCORE_METHOD,
         "artifact_penalty_method": ARTIFACT_PENALTY_METHOD,
@@ -302,6 +356,7 @@ def run_smart_tissue_nuclei_selection(config: SmartTissueNucleiConfig) -> dict[s
             features = compute_patch_features(
                 rgb_patch=patch_image,
                 feature_size=config.feature_size,
+                nuclear_proxy=config.nuclear_proxy,
             )
             row = candidate_rows_by_id[candidate.candidate_id]
             row.update(
@@ -322,26 +377,91 @@ def run_smart_tissue_nuclei_selection(config: SmartTissueNucleiConfig) -> dict[s
                 "x_level0": candidate.x_level0,
                 "y_level0": candidate.y_level0,
                 "patch_size": candidate.patch_size,
+                "thumbnail_tissue_ratio": candidate.thumbnail_tissue_ratio,
                 **features,
             }
             scored_records.append(scored_record)
             del patch_image
 
         apply_feature_scores(scored_records, weights=DEFAULT_SMART_WEIGHTS)
-        selected_records = greedy_select_with_spatial_penalty(
-            records=scored_records,
-            max_patches=config.max_patches,
-            lambda_spatial=config.lambda_spatial,
-            min_distance_level0=float(min_distance_level0),
+        x_norm = normalize_feature(record["x_level0"] for record in scored_records)
+        y_norm = normalize_feature(record["y_level0"] for record in scored_records)
+        thumbnail_norm = normalize_feature(
+            record["thumbnail_tissue_ratio"] for record in scored_records
         )
+        for index, record in enumerate(scored_records):
+            record["x_norm"] = x_norm[index]
+            record["y_norm"] = y_norm[index]
+            record["thumbnail_tissue_ratio_norm"] = thumbnail_norm[index]
+
+        quota_stats: dict[str, object] = {
+            "regions_covered": None,
+            "active_regions": None,
+            "patches_per_region": {},
+            "quota_grid": config.quota_grid if config.spatial_strategy == "quotas" else None,
+            "quota_min_score_quantile": config.quota_min_score_quantile
+            if config.spatial_strategy == "quotas"
+            else None,
+            "quota_fill_rate": None,
+            "mean_feature_diversity_bonus_selected": None,
+            "quota_score_threshold": None,
+            "quota_eligible_candidates": None,
+        }
+        if config.spatial_strategy == "quotas":
+            assign_spatial_regions(
+                records=scored_records,
+                slide_dimensions=slide_dimensions,
+                quota_grid=config.quota_grid,
+            )
+            selected_records, quota_stats = select_with_spatial_quotas(
+                records=scored_records,
+                max_patches=config.max_patches,
+                lambda_spatial=config.lambda_spatial,
+                min_distance_level0=float(min_distance_level0),
+                quota_min_score_quantile=config.quota_min_score_quantile,
+                diversity_strategy=config.diversity_strategy,
+                feature_diversity_weight=config.feature_diversity_weight,
+                feature_names=FEATURE_DIVERSITY_FIELDS,
+            )
+        else:
+            selected_records = greedy_select_with_spatial_penalty(
+                records=scored_records,
+                max_patches=config.max_patches,
+                lambda_spatial=config.lambda_spatial,
+                min_distance_level0=float(min_distance_level0),
+                diversity_strategy=config.diversity_strategy,
+                feature_diversity_weight=config.feature_diversity_weight,
+                feature_names=FEATURE_DIVERSITY_FIELDS,
+            )
+            selected_region_ids = {
+                str(record.get("region_id", ""))
+                for record in selected_records
+                if record.get("region_id")
+            }
+            if selected_records:
+                bonuses = [
+                    float(record.get("feature_diversity_bonus", 0.0))
+                    for record in selected_records
+                ]
+                quota_stats["mean_feature_diversity_bonus_selected"] = (
+                    sum(bonuses) / len(bonuses)
+                )
+            quota_stats["regions_covered"] = len(selected_region_ids) if selected_region_ids else None
 
         for record in scored_records:
             row = candidate_rows_by_id[str(record["candidate_id"])]
             row.update(
                 {
                     "spatial_penalty": _format_float(record["spatial_penalty"]),
+                    "feature_diversity_bonus": _format_float(
+                        record.get("feature_diversity_bonus", 0.0)
+                    ),
                     "score_raw": _format_float(record["score_raw"]),
                     "score_final": _format_float(record["score_final"]),
+                    "region_id": record.get("region_id", ""),
+                    "region_row": record.get("region_row", ""),
+                    "region_col": record.get("region_col", ""),
+                    "quota_grid": record.get("quota_grid", row.get("quota_grid", "")),
                     "selected": bool(record["selected"]),
                     "rank": record["rank"],
                 }
@@ -410,8 +530,26 @@ def run_smart_tissue_nuclei_selection(config: SmartTissueNucleiConfig) -> dict[s
             "mean_visual_entropy_selected": _mean_selected(selected_rows, "visual_entropy"),
             "mean_blur_score_selected": _mean_selected(selected_rows, "blur_score"),
             "mean_artifact_penalty_selected": _mean_selected(selected_rows, "artifact_penalty"),
+            "mean_feature_diversity_bonus_selected": _mean_selected(
+                selected_rows,
+                "feature_diversity_bonus",
+            ),
             "mean_score_raw_selected": _mean_selected(selected_rows, "score_raw"),
             "mean_score_final_selected": _mean_selected(selected_rows, "score_final"),
+            "nuclear_proxy": config.nuclear_proxy,
+            "spatial_strategy": config.spatial_strategy,
+            "quota_grid": config.quota_grid if config.spatial_strategy == "quotas" else None,
+            "quota_min_score_quantile": config.quota_min_score_quantile
+            if config.spatial_strategy == "quotas"
+            else None,
+            "regions_covered": quota_stats.get("regions_covered"),
+            "active_regions": quota_stats.get("active_regions"),
+            "patches_per_region": quota_stats.get("patches_per_region"),
+            "quota_fill_rate": quota_stats.get("quota_fill_rate"),
+            "quota_score_threshold": quota_stats.get("score_threshold"),
+            "quota_eligible_candidates": quota_stats.get("eligible_candidates"),
+            "diversity_strategy": config.diversity_strategy,
+            "feature_diversity_weight": config.feature_diversity_weight,
             "runtime_seconds": round(time.perf_counter() - start_time, 3),
             "candidate_metadata_csv": str(candidate_metadata_path),
             "selected_metadata_csv": str(selected_metadata_path),
@@ -423,7 +561,7 @@ def run_smart_tissue_nuclei_selection(config: SmartTissueNucleiConfig) -> dict[s
             "preview_shows": PREVIEW_SHOWS,
             "candidate_ordering": CANDIDATE_ORDERING,
             "tissue_mask_method": TISSUE_MASK_METHOD,
-            "nuclear_signal_method": NUCLEAR_SIGNAL_METHOD,
+            "nuclear_signal_method": nuclear_signal_method_for_proxy(config.nuclear_proxy),
             "visual_entropy_method": VISUAL_ENTROPY_METHOD,
             "blur_score_method": BLUR_SCORE_METHOD,
             "artifact_penalty_method": ARTIFACT_PENALTY_METHOD,

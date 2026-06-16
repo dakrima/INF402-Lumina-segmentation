@@ -13,7 +13,12 @@ if str(ROOT_DIR) not in sys.path:
 
 BASELINE_SELECTOR_NAME = "baseline_tiatoolbox"
 SMART_SELECTOR_NAME = "smart_tissue_nuclei_v1"
-SUPPORTED_SELECTORS = (BASELINE_SELECTOR_NAME, SMART_SELECTOR_NAME)
+SMART_V2_LIGHT_SELECTOR_NAME = "smart_tissue_nuclei_v2_light"
+SUPPORTED_SELECTORS = (
+    BASELINE_SELECTOR_NAME,
+    SMART_SELECTOR_NAME,
+    SMART_V2_LIGHT_SELECTOR_NAME,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,7 +43,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=300,
         help=(
-            "For smart_tissue_nuclei_v1 only. 0 scores all thumbnail-filtered "
+            "For smart selectors. 0 scores all thumbnail-filtered "
             "candidates; N > 0 scores at most N candidates after seeded shuffle."
         ),
     )
@@ -46,22 +51,57 @@ def parse_args() -> argparse.Namespace:
         "--feature-size",
         type=int,
         default=256,
-        help="For smart_tissue_nuclei_v1 only. Downsampled patch size used for features.",
+        help="For smart selectors. Downsampled patch size used for features.",
     )
     parser.add_argument(
         "--lambda-spatial",
         type=float,
         default=0.15,
-        help="For smart_tissue_nuclei_v1 only. Spatial redundancy penalty weight.",
+        help="For smart selectors. Spatial redundancy penalty weight.",
     )
     parser.add_argument(
         "--min-distance-level0",
         type=int,
         default=None,
         help=(
-            "For smart_tissue_nuclei_v1 only. Distance scale for spatial penalty. "
+            "For smart selectors. Distance scale for spatial penalty. "
             "Defaults to --patch-size."
         ),
+    )
+    parser.add_argument(
+        "--nuclear-proxy",
+        choices=("rgb_purple", "hed_deconvolution"),
+        default=None,
+        help="For smart selectors. Defaults to rgb_purple for v1 and hed_deconvolution for v2_light.",
+    )
+    parser.add_argument(
+        "--spatial-strategy",
+        choices=("penalty", "quotas"),
+        default=None,
+        help="For smart selectors. Defaults to penalty for v1 and quotas for v2_light.",
+    )
+    parser.add_argument(
+        "--quota-grid",
+        default="4x4",
+        help="For spatial quotas. Format ROWSxCOLS, for example 4x4.",
+    )
+    parser.add_argument(
+        "--quota-min-score-quantile",
+        type=float,
+        default=0.25,
+        help="Minimum score_raw quantile used by soft quota selection.",
+    )
+    parser.add_argument(
+        "--diversity-strategy",
+        choices=("none", "farthest_feature"),
+        default=None,
+        help="For smart selectors. Defaults to none for v1 and farthest_feature for v2_light.",
+    )
+    parser.add_argument(
+        "--feature-diversity-weight",
+        type=float,
+        default=0.10,
+        help="Weight for farthest_feature diversity bonus.",
     )
     parser.add_argument(
         "--overwrite",
@@ -83,6 +123,7 @@ def main() -> int:
     try:
         from src.selection import (
             BaselineSelectionConfig,
+            SMART_V2_LIGHT_SELECTOR_NAME as PACKAGE_SMART_V2_LIGHT_SELECTOR_NAME,
             SmartTissueNucleiConfig,
             run_baseline_selection,
             run_smart_tissue_nuclei_selection,
@@ -108,6 +149,17 @@ def main() -> int:
         )
         runner = run_baseline_selection
     else:
+        is_v2_light = args.selector == SMART_V2_LIGHT_SELECTOR_NAME
+        nuclear_proxy = args.nuclear_proxy or (
+            "hed_deconvolution" if is_v2_light else "rgb_purple"
+        )
+        spatial_strategy = args.spatial_strategy or ("quotas" if is_v2_light else "penalty")
+        diversity_strategy = args.diversity_strategy or (
+            "farthest_feature" if is_v2_light else "none"
+        )
+        if is_v2_light and PACKAGE_SMART_V2_LIGHT_SELECTOR_NAME != SMART_V2_LIGHT_SELECTOR_NAME:
+            print("[FAIL] Internal selector constant mismatch for smart_tissue_nuclei_v2_light.")
+            return 1
         config = SmartTissueNucleiConfig(
             wsi_path=args.wsi_path,
             output_dir=args.output_dir,
@@ -124,6 +176,12 @@ def main() -> int:
             feature_size=args.feature_size,
             lambda_spatial=args.lambda_spatial,
             min_distance_level0=args.min_distance_level0,
+            nuclear_proxy=nuclear_proxy,
+            spatial_strategy=spatial_strategy,
+            quota_grid=args.quota_grid,
+            quota_min_score_quantile=args.quota_min_score_quantile,
+            diversity_strategy=diversity_strategy,
+            feature_diversity_weight=args.feature_diversity_weight,
         )
         runner = run_smart_tissue_nuclei_selection
 
@@ -136,11 +194,15 @@ def main() -> int:
     print(f"Max patches: {args.max_patches}")
     print(f"Minimum tissue ratio: {args.min_tissue_ratio}")
     print(f"Seed: {args.seed}")
-    if args.selector == SMART_SELECTOR_NAME:
+    if args.selector in (SMART_SELECTOR_NAME, SMART_V2_LIGHT_SELECTOR_NAME):
         print(f"Max candidates to score: {args.max_candidates_to_score}")
         print(f"Feature size: {args.feature_size}")
         print(f"Lambda spatial: {args.lambda_spatial}")
         print(f"Minimum distance level 0: {args.min_distance_level0 or args.patch_size}")
+        print(f"Nuclear proxy: {config.nuclear_proxy}")
+        print(f"Spatial strategy: {config.spatial_strategy}")
+        print(f"Quota grid: {config.quota_grid}")
+        print(f"Diversity strategy: {config.diversity_strategy}")
     print("Clinical warning: technical selection only; not diagnosis, not RCB.")
 
     try:

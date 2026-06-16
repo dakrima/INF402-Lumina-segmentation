@@ -11,7 +11,10 @@ from src.preprocessing.wsi_patch_extraction import (
 )
 
 
-NUCLEAR_SIGNAL_METHOD = "purple_hematoxylin_proxy_v1"
+RGB_NUCLEAR_SIGNAL_METHOD = "purple_hematoxylin_proxy_v1"
+HED_NUCLEAR_SIGNAL_METHOD = "hed_deconvolution_v1"
+NUCLEAR_SIGNAL_METHOD = RGB_NUCLEAR_SIGNAL_METHOD
+SUPPORTED_NUCLEAR_PROXIES = {"rgb_purple", "hed_deconvolution"}
 VISUAL_ENTROPY_METHOD = "grayscale_histogram_entropy_32_bins"
 BLUR_SCORE_METHOD = "grayscale_gradient_variance"
 ARTIFACT_PENALTY_METHOD = "white_black_saturation_low_entropy_heuristic"
@@ -34,7 +37,7 @@ def _masked_values(values: np.ndarray, mask: np.ndarray) -> np.ndarray:
     return values[mask]
 
 
-def compute_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> float:
+def compute_rgb_purple_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> float:
     """Approximate hematoxylin/nuclear signal from purple-blue dark pixels."""
     red = rgb_array[..., 0]
     green = rgb_array[..., 1]
@@ -47,6 +50,64 @@ def compute_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> fl
     if values.size == 0:
         return 0.0
     return float(np.clip(np.mean(values) * 4.0, 0.0, 1.0))
+
+
+def compute_hed_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> float:
+    """Approximate hematoxylin signal with fixed H&E optical-density deconvolution."""
+    eps = 1e-6
+    optical_density = -np.log(np.clip(rgb_array, eps, 1.0))
+    stain_matrix = np.array(
+        [
+            [0.650, 0.704, 0.286],
+            [0.072, 0.990, 0.105],
+            [0.268, 0.570, 0.776],
+        ],
+        dtype=np.float32,
+    )
+    stain_matrix = stain_matrix / np.linalg.norm(stain_matrix, axis=1, keepdims=True)
+    concentrations = optical_density.reshape(-1, 3) @ np.linalg.pinv(stain_matrix)
+    hematoxylin = np.maximum(0.0, concentrations[:, 0]).reshape(rgb_array.shape[:2])
+    values = _masked_values(hematoxylin, tissue_mask)
+    if values.size == 0:
+        return 0.0
+    percentile_90 = float(np.percentile(values, 90))
+    mean_value = float(np.mean(values))
+    signal = 0.6 * percentile_90 + 0.4 * mean_value
+    return float(np.clip(signal / 1.5, 0.0, 1.0))
+
+
+def compute_nuclear_signal(
+    rgb_array: np.ndarray,
+    tissue_mask: np.ndarray,
+    nuclear_proxy: str = "rgb_purple",
+) -> float:
+    """Compute the configured non-clinical nuclear/hematoxylin proxy."""
+    if nuclear_proxy == "rgb_purple":
+        return compute_rgb_purple_nuclear_signal(
+            rgb_array=rgb_array,
+            tissue_mask=tissue_mask,
+        )
+    if nuclear_proxy == "hed_deconvolution":
+        return compute_hed_nuclear_signal(
+            rgb_array=rgb_array,
+            tissue_mask=tissue_mask,
+        )
+    raise ValueError(
+        f"Unsupported nuclear_proxy '{nuclear_proxy}'. "
+        "Use one of: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
+    )
+
+
+def nuclear_signal_method_for_proxy(nuclear_proxy: str) -> str:
+    """Return the method label written to manifests for a nuclear proxy."""
+    if nuclear_proxy == "rgb_purple":
+        return RGB_NUCLEAR_SIGNAL_METHOD
+    if nuclear_proxy == "hed_deconvolution":
+        return HED_NUCLEAR_SIGNAL_METHOD
+    raise ValueError(
+        f"Unsupported nuclear_proxy '{nuclear_proxy}'. "
+        "Use one of: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
+    )
 
 
 def compute_visual_entropy(
@@ -117,6 +178,7 @@ def compute_artifact_penalty(
 def compute_patch_features(
     rgb_patch: Image.Image,
     feature_size: int = 256,
+    nuclear_proxy: str = "rgb_purple",
 ) -> dict[str, float]:
     """Compute all smart-selector features on a downsampled patch."""
     feature_patch = _resize_for_features(rgb_patch, feature_size=feature_size)
@@ -126,6 +188,7 @@ def compute_patch_features(
     nuclear_signal = compute_nuclear_signal(
         rgb_array=rgb_array,
         tissue_mask=tissue_mask,
+        nuclear_proxy=nuclear_proxy,
     )
     visual_entropy = compute_visual_entropy(
         rgb_array=rgb_array,

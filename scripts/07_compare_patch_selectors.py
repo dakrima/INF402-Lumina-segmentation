@@ -86,6 +86,10 @@ def main() -> int:
     print(f"Selected overlap CSV: {summary['outputs']['selected_overlap_csv']}")
     print(f"Selected patches CSV: {summary['outputs']['comparison_selected_patches_csv']}")
     print(f"Preview image: {summary['outputs']['comparison_preview_png']}")
+    print(
+        "Selected-only preview image: "
+        f"{summary['outputs']['comparison_preview_selected_only_png']}"
+    )
     return 0
 
 

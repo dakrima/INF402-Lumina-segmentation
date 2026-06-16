@@ -309,6 +309,20 @@ python scripts/08_segment_selected_patches.py \
 
 La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. La máscara cruda del modelo puede tener menor resolución que el patch original; para el overlay se reescala con vecino más cercano para preservar etiquetas discretas de clase. Por eso, `class_pixel_counts` corresponde a la resolución cruda de predicción, no necesariamente al tamaño visual del overlay. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
 
+## Etapa 5.5 - comparación de segmentación baseline vs smart_v2
+
+Una vez segmentados los patches seleccionados por cada método, se puede comparar técnicamente la distribución de clases predichas, warnings, tamaños de máscara y métricas operativas sin volver a ejecutar selección ni inferencia:
+
+```bash
+python scripts/09_compare_segmentation_on_selected_patches.py \
+  --baseline-seg-dir outputs/segmentation/baseline_tiatoolbox \
+  --smart-seg-dir outputs/segmentation/smart_tissue_nuclei_v2_light \
+  --output-dir outputs/segmentation/comparison_baseline_vs_smart_v2_light \
+  --overwrite
+```
+
+La salida incluye `segmentation_comparison_summary.json`, métricas CSV, distribución de clases predichas, filas por patch, preview visual y notas Markdown. Esta comparación es técnica: no usa ground truth, no diagnostica, no calcula RCB y no constituye validación clínica.
+
 ## Prueba de carga del baseline TIAToolbox
 
 Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:

@@ -307,7 +307,7 @@ python scripts/08_segment_selected_patches.py \
   --overwrite
 ```
 
-La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
+La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. La máscara cruda del modelo puede tener menor resolución que el patch original; para el overlay se reescala con vecino más cercano para preservar etiquetas discretas de clase. Por eso, `class_pixel_counts` corresponde a la resolución cruda de predicción, no necesariamente al tamaño visual del overlay. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
 
 ## Prueba de carga del baseline TIAToolbox
 

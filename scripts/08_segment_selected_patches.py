@@ -121,6 +121,11 @@ def main() -> int:
     print(f"Patches completed: {summary['num_patches_completed']}")
     print(f"Patches failed: {summary['num_patches_failed']}")
     print(f"Patches skipped: {summary['num_patches_skipped']}")
+    print(f"Patch warnings: {summary.get('num_patch_warnings', 0)}")
+    print(
+        "Patches with resized visualization: "
+        f"{summary.get('num_patches_with_resized_visualization', 0)}"
+    )
     print(f"Per-patch CSV: {summary['per_patch_segmentation_csv']}")
     print(f"Summary JSON: {summary['output_dir']}/inference_summary.json")
     print(f"Output dir: {summary['output_dir']}")

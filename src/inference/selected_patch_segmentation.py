@@ -16,6 +16,12 @@ CLINICAL_WARNING = (
     "Technical segmentation over selected patches only. Not for diagnosis, "
     "not RCB, not clinical validation."
 )
+PREDICTION_RESOLUTION_NOTE = (
+    "The raw prediction mask may have a different resolution than the input patch. "
+    "For visualization, masks are resized to the patch size using nearest-neighbor "
+    "interpolation to preserve discrete class labels. Pixel counts refer to the raw "
+    "prediction resolution unless explicitly stated otherwise."
+)
 REQUIRED_SELECTION_FILES = [
     "selected_metadata.csv",
     "selection_summary.json",
@@ -44,6 +50,11 @@ PER_PATCH_SEGMENTATION_FIELDS = [
     "overlay_with_legend_path",
     "input_preview_path",
     "patch_inference_summary_path",
+    "input_image_shape",
+    "raw_prediction_shape",
+    "resized_for_visualization",
+    "num_patch_warnings",
+    "patch_warnings",
 ]
 
 
@@ -164,6 +175,26 @@ def _json_cell(value: object) -> str:
     return json.dumps(value, sort_keys=True)
 
 
+def _shape_from_image_size(summary: dict[str, Any]) -> list[int] | None:
+    image_height = summary.get("image_height")
+    image_width = summary.get("image_width")
+    if image_height is None or image_width is None:
+        return None
+    try:
+        return [int(image_height), int(image_width)]
+    except (TypeError, ValueError):
+        return None
+
+
+def _summary_was_resized_for_visualization(summary: dict[str, Any]) -> bool:
+    prediction_shape = summary.get("prediction_shape")
+    visualized_shape = summary.get("visualized_mask_shape")
+    if prediction_shape and visualized_shape and prediction_shape != visualized_shape:
+        return True
+    warnings = summary.get("warnings") or []
+    return any("resized with nearest neighbor" in str(warning).lower() for warning in warnings)
+
+
 def _patch_id_for_row(row: dict[str, str]) -> str:
     patch_id = row.get("patch_id", "").strip()
     if patch_id:
@@ -201,6 +232,11 @@ def _empty_result_row(
         "overlay_with_legend_path": "",
         "input_preview_path": "",
         "patch_inference_summary_path": "",
+        "input_image_shape": "",
+        "raw_prediction_shape": "",
+        "resized_for_visualization": "false",
+        "num_patch_warnings": 0,
+        "patch_warnings": "[]",
     }
 
 
@@ -251,6 +287,7 @@ def _result_row_from_summary(
     copied_outputs: dict[str, str],
 ) -> dict[str, object]:
     error = patch_summary.get("error") or ""
+    patch_warnings = patch_summary.get("warnings") or []
     return {
         "patch_id": patch_id,
         "filename": source_row.get("filename", ""),
@@ -276,6 +313,13 @@ def _result_row_from_summary(
         ),
         "input_preview_path": copied_outputs.get("input_preview", ""),
         "patch_inference_summary_path": str(patch_summary_path),
+        "input_image_shape": _json_cell(_shape_from_image_size(patch_summary)),
+        "raw_prediction_shape": _json_cell(patch_summary.get("prediction_shape")),
+        "resized_for_visualization": (
+            "true" if _summary_was_resized_for_visualization(patch_summary) else "false"
+        ),
+        "num_patch_warnings": len(patch_warnings),
+        "patch_warnings": _json_cell(patch_warnings),
     }
 
 
@@ -344,6 +388,10 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
     failed = 0
     skipped = 0
     valid_seen = 0
+    num_patch_warnings = 0
+    num_patches_with_warnings = 0
+    num_patches_with_resized_visualization = 0
+    unique_patch_warnings: set[str] = set()
 
     for index, row in enumerate(selected_rows, start=1):
         filename = row.get("filename", "").strip()
@@ -387,6 +435,13 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                 overlay_alpha=config.overlay_alpha,
                 clear_output=True,
             )
+            patch_warnings = [str(warning) for warning in patch_summary.get("warnings") or []]
+            if patch_warnings:
+                num_patches_with_warnings += 1
+                num_patch_warnings += len(patch_warnings)
+                unique_patch_warnings.update(patch_warnings)
+            if _summary_was_resized_for_visualization(patch_summary):
+                num_patches_with_resized_visualization += 1
             copied_outputs = (
                 _copy_completed_outputs(patch_id, patch_summary, output_dir)
                 if patch_summary.get("status") == "completed"
@@ -424,7 +479,13 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
 
     _write_csv(result_rows, per_patch_csv_path, PER_PATCH_SEGMENTATION_FIELDS)
 
-    if failed or skipped or warnings:
+    if num_patch_warnings:
+        warnings.append(
+            f"Patch-level warnings observed: {num_patch_warnings} warnings "
+            f"across {num_patches_with_warnings} patches."
+        )
+
+    if failed or skipped or warnings or num_patch_warnings:
         status = "completed_with_warnings"
     else:
         status = "completed"
@@ -444,6 +505,11 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         "num_patches_completed": completed,
         "num_patches_failed": failed,
         "num_patches_skipped": skipped,
+        "num_patch_warnings": num_patch_warnings,
+        "num_patches_with_warnings": num_patches_with_warnings,
+        "unique_patch_warnings": sorted(unique_patch_warnings),
+        "num_patches_with_resized_visualization": num_patches_with_resized_visualization,
+        "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
         "runtime_seconds": round(time.perf_counter() - start_time, 3),
         "selection_summary_path": str(selection_summary_path),
         "selection_method_config_path": str(method_config_path),

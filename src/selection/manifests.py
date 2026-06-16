@@ -11,15 +11,18 @@ from typing import Any
 
 CANDIDATE_METADATA_FIELDS = [
     "candidate_id",
+    "grid_index",
     "x_level0",
     "y_level0",
     "patch_size",
     "width",
     "height",
     "thumbnail_tissue_ratio",
+    "evaluated",
     "tissue_ratio",
     "selected",
     "rank",
+    "filename",
     "selection_method",
     "seed",
     "source_wsi_path",

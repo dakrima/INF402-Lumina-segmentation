@@ -34,6 +34,9 @@ from src.selection.previews import save_wsi_patch_selection_preview
 
 BASELINE_SELECTOR_NAME = "baseline_tiatoolbox"
 CANDIDATE_ORDERING = "thumbnail_filtered_seeded_shuffle"
+CANDIDATE_POOL = "thumbnail_tissue_mask_filtered"
+CANDIDATE_METADATA_SEMANTICS = "all_thumbnail_filtered_candidates"
+PREVIEW_SHOWS = "evaluated_candidates"
 CLINICAL_WARNING = (
     "Technical patch selection only. Not for diagnosis, not RCB, not clinical validation."
 )
@@ -115,29 +118,27 @@ def _base_slide_metadata(slide: object) -> dict[str, Any]:
     }
 
 
-def _candidate_row(
+def _candidate_pool_row(
     candidate: PatchCandidate,
     *,
-    patch_width: int,
-    patch_height: int,
-    tissue_ratio: float,
-    selected: bool,
-    rank: int | None,
     config: BaselineSelectionConfig,
     wsi_path: Path,
     slide_metadata: dict[str, Any],
 ) -> dict[str, object]:
     row: dict[str, object] = {
         "candidate_id": candidate.candidate_id,
+        "grid_index": candidate.grid_index,
         "x_level0": candidate.x_level0,
         "y_level0": candidate.y_level0,
         "patch_size": candidate.patch_size,
-        "width": patch_width,
-        "height": patch_height,
+        "width": "",
+        "height": "",
         "thumbnail_tissue_ratio": f"{candidate.thumbnail_tissue_ratio:.6f}",
-        "tissue_ratio": f"{tissue_ratio:.6f}",
-        "selected": selected,
-        "rank": rank if rank is not None else "",
+        "evaluated": False,
+        "tissue_ratio": "",
+        "selected": False,
+        "rank": "",
+        "filename": "",
         "selection_method": config.selector,
         "seed": config.seed,
         "source_wsi_path": str(wsi_path),
@@ -186,6 +187,8 @@ def _method_config(config: BaselineSelectionConfig) -> dict[str, object]:
         "seed": config.seed,
         "thumbnail_max_size": config.thumbnail_max_size,
         "candidate_ordering": CANDIDATE_ORDERING,
+        "candidate_pool": CANDIDATE_POOL,
+        "candidate_metadata_semantics": CANDIDATE_METADATA_SEMANTICS,
         "tissue_mask_method": TISSUE_MASK_METHOD,
         "created_at": utc_now_iso(),
     }
@@ -237,9 +240,22 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
         ordered_candidates = list(candidates)
         random.Random(config.seed).shuffle(ordered_candidates)
 
-        candidate_rows: list[dict[str, object]] = []
+        candidate_rows = [
+            _candidate_pool_row(
+                candidate,
+                config=config,
+                wsi_path=wsi_path,
+                slide_metadata=slide_metadata,
+            )
+            for candidate in candidates
+        ]
+        candidate_rows_by_id = {
+            str(row["candidate_id"]): row
+            for row in candidate_rows
+        }
         selected_rows: list[dict[str, object]] = []
         selected_tissue_ratios: list[float] = []
+        num_candidates_evaluated = 0
         num_candidates_passing_tissue_filter = 0
 
         for candidate in ordered_candidates:
@@ -254,19 +270,19 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
             tissue_ratio = compute_simple_tissue_ratio(patch_image)
             selected = tissue_ratio >= config.min_tissue_ratio
             rank = len(selected_rows) + 1 if selected else None
+            num_candidates_evaluated += 1
 
-            row = _candidate_row(
-                candidate,
-                patch_width=patch_image.width,
-                patch_height=patch_image.height,
-                tissue_ratio=tissue_ratio,
-                selected=selected,
-                rank=rank,
-                config=config,
-                wsi_path=wsi_path,
-                slide_metadata=slide_metadata,
+            row = candidate_rows_by_id[candidate.candidate_id]
+            row.update(
+                {
+                    "width": patch_image.width,
+                    "height": patch_image.height,
+                    "evaluated": True,
+                    "tissue_ratio": f"{tissue_ratio:.6f}",
+                    "selected": selected,
+                    "rank": rank if rank is not None else "",
+                }
             )
-            candidate_rows.append(row)
 
             if not selected:
                 continue
@@ -274,6 +290,7 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
             num_candidates_passing_tissue_filter += 1
             patch_id = f"patch_{len(selected_rows):04d}_x{candidate.x_level0}_y{candidate.y_level0}"
             filename = f"{patch_id}.png"
+            row["filename"] = filename
             patch_image.save(selected_dir / filename)
             selected_rows.append(
                 _selected_row(
@@ -296,7 +313,10 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
         )
         save_wsi_patch_selection_preview(
             thumbnail=thumbnail,
-            candidate_rows=candidate_rows,
+            candidate_rows=[
+                row for row in candidate_rows
+                if row["evaluated"] in (True, "True", "true", "1")
+            ],
             slide_dimensions=slide_dimensions,
             output_path=preview_path,
         )
@@ -318,9 +338,13 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
             **slide_metadata,
             "num_candidates_generated": num_candidates_generated,
             "num_thumbnail_candidates_passing_mask": len(candidates),
-            "num_candidates_evaluated": len(candidate_rows),
+            "num_candidate_rows_written": len(candidate_rows),
+            "num_candidates_evaluated": num_candidates_evaluated,
             "num_candidates_passing_tissue_filter": num_candidates_passing_tissue_filter,
             "num_selected": len(selected_rows),
+            "candidate_pool_definition": (
+                "Grid candidates that passed thumbnail tissue mask using min_tissue_ratio."
+            ),
             "mean_tissue_ratio_selected": mean_tissue_ratio_selected,
             "min_tissue_ratio_selected": min(selected_tissue_ratios)
             if selected_tissue_ratios
@@ -335,6 +359,9 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
             "preview_image": str(preview_path),
             "selected_dir": str(selected_dir),
             "candidate_ordering": CANDIDATE_ORDERING,
+            "candidate_pool": CANDIDATE_POOL,
+            "candidate_metadata_semantics": CANDIDATE_METADATA_SEMANTICS,
+            "preview_shows": PREVIEW_SHOWS,
             "tissue_mask_method": TISSUE_MASK_METHOD,
             "clinical_warning": CLINICAL_WARNING,
         }

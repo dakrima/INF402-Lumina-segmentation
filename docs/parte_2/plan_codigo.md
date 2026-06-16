@@ -156,9 +156,9 @@ python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-Este baseline genera candidatos por grilla, filtra por máscara/proporción de tejido, aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`.
+Este baseline genera candidatos por grilla, filtra por máscara/proporción de tejido, aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` representa el pool común filtrado por thumbnail; `selected_metadata.csv` contiene solo los patches finalmente seleccionados.
 
-Limitación: todavía no implementa `smart_tissue_nuclei_v1`, señal nuclear, diversidad espacial, ranking inteligente, HoVer-Net, CLAM ni comparación formal. Esa comparación corresponde a la siguiente etapa.
+Limitación: todavía no implementa `smart_tissue_nuclei_v1`, señal nuclear, diversidad espacial, ranking inteligente, HoVer-Net, CLAM ni comparación formal. Esa comparación corresponde a la siguiente etapa usando el mismo pool de candidatos y el mismo presupuesto de patches.
 
 ### 4. BCSS mínimo
 

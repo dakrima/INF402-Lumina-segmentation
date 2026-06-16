@@ -221,9 +221,9 @@ python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`.
+La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` contiene el pool común de candidatos filtrados por thumbnail, mientras que `selected_metadata.csv` contiene solo los patches seleccionados.
 
-Limitación actual: este baseline no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. El próximo paso técnico es implementar `smart_tissue_nuclei_v1` y compararlo contra este baseline bajo el mismo presupuesto de patches.
+Limitación actual: este baseline tipo TIAToolbox no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. La separación entre pool de candidatos y seleccionados prepara la comparación justa con `smart_tissue_nuclei_v1` bajo el mismo presupuesto de patches.
 
 ## Prueba de carga del baseline TIAToolbox
 

@@ -182,6 +182,21 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 El flujo es memory-safe para CPU: no carga la WSI completa, no guarda todos los patches en memoria, lee candidatos uno por uno y calcula features sobre patches reducidos. `candidate_metadata.csv` conserva todo el pool; solo los candidatos scoreados tienen columnas de features completas. El siguiente hito es una comparación formal baseline vs selector propio con métricas de cobertura, redundancia, diversidad y costo.
 
+### 3.4. Etapa 3 - comparación baseline vs smart_tissue_nuclei_v1
+
+La comparación formal usa outputs existentes de ambos selectores y no abre la WSI. Valida configuración compartida, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula diversidad espacial.
+
+```bash
+conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
+  --baseline-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
+  --smart-dir outputs/patch_selection/smart_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/comparison_tcga_a2_a3xs \
+  --feature-size 256 \
+  --overwrite
+```
+
+La salida esperada es `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png` y `comparison_notes.md`. Esta etapa compara selección de patches de forma técnica; no ejecuta segmentación, no entrena modelos y no implica superioridad clínica. El siguiente paso es decidir si corresponde ajustar pesos o correr segmentación posterior sobre los patches seleccionados.
+
 ### 4. BCSS mínimo
 
 Incorporar BCSS como dataset principal de segmentación semántica cuando se definan rutas, permisos y formato de descarga. No se debe subir BCSS al repositorio.

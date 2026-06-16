@@ -247,6 +247,21 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 `--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. El siguiente paso es comparar formalmente `baseline_tiatoolbox` contra `smart_tissue_nuclei_v1` con el mismo pool y presupuesto de patches.
 
+## Etapa 3 - comparación de selectores
+
+La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados:
+
+```bash
+conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
+  --baseline-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
+  --smart-dir outputs/patch_selection/smart_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/comparison_tcga_a2_a3xs \
+  --feature-size 256 \
+  --overwrite
+```
+
+La salida incluye `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png` y `comparison_notes.md`. Las métricas cubren conteos, overlap, features recomputadas, diversidad espacial y runtime. Esta etapa no abre la WSI, no ejecuta modelos y no valida desempeño clínico; el siguiente paso es segmentación posterior sobre seleccionados o ajuste de pesos si la comparación lo justifica.
+
 ## Prueba de carga del baseline TIAToolbox
 
 Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:

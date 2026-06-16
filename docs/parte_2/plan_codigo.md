@@ -10,8 +10,11 @@ La metodología se mantiene conservadora:
 2. probar herramientas de lectura e inferencia;
 3. ejecutar patching en imágenes pequeñas y WSI;
 4. formalizar un baseline de selección tipo TIAToolbox;
-5. usar segmentación semántica posterior como validación visual/técnica;
-6. hacer fine-tuning solo si la segmentación posterior no basta.
+5. comparar ese baseline contra un selector propio de patches;
+6. usar segmentación semántica posterior como validación visual/técnica;
+7. hacer fine-tuning solo si la segmentación posterior no basta.
+
+Estado de cierre de selección de patches: `baseline_tiatoolbox` queda como baseline comparativo, `smart_tissue_nuclei_v1` queda como versión intermedia/ablation y `smart_tissue_nuclei_v2_light` queda como selector propio candidato final por ahora.
 
 ## Hitos
 
@@ -184,7 +187,7 @@ El flujo es memory-safe para CPU: no carga la WSI completa, no guarda todos los 
 
 ### 3.4. Etapa 2.1 - smart_tissue_nuclei_v2_light
 
-`smart_tissue_nuclei_v2_light` conserva el flujo memory-safe y agrega HED color deconvolution como proxy hematoxilina/nuclear, cuotas espaciales suaves y diversidad por features simples.
+`smart_tissue_nuclei_v2_light` conserva el flujo memory-safe y agrega HED color deconvolution como proxy hematoxilina/nuclear, cuotas espaciales suaves y diversidad por features simples. Esta versión queda congelada por ahora como selector propio candidato final.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
@@ -212,18 +215,18 @@ Las cuotas son suaves: seleccionan desde regiones activas sin forzar patches de 
 
 ### 3.5. Etapa 3 - comparación baseline vs smart_tissue_nuclei_v1/v2_light
 
-La comparación formal usa outputs existentes de ambos selectores y no abre la WSI. Valida configuración compartida, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula diversidad espacial.
+La comparación formal usa outputs existentes de ambos selectores. Valida configuración compartida, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula diversidad espacial. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`; v1 se conserva como ablation/intermedio.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
   --baseline-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
-  --smart-dir outputs/patch_selection/smart_tcga_a2_a3xs \
-  --output-dir outputs/patch_selection/comparison_tcga_a2_a3xs \
+  --smart-dir outputs/patch_selection/smart_v2_light_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/comparison_baseline_vs_smart_v2_light_tcga_a2_a3xs \
   --feature-size 256 \
   --overwrite
 ```
 
-La salida esperada es `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png` y `comparison_notes.md`. Esta etapa compara selección de patches de forma técnica; no ejecuta segmentación, no entrena modelos y no implica superioridad clínica. El siguiente paso es decidir si corresponde ajustar pesos o correr segmentación posterior sobre los patches seleccionados.
+La salida esperada es `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png`, `comparison_preview_selected_only.png` y `comparison_notes.md`. Esta etapa compara selección de patches de forma técnica; no ejecuta segmentación, no entrena modelos y no implica superioridad clínica. El preview selected-only puede usar la WSI solo para reconstruir un thumbnail limpio si el archivo está disponible.
 
 ### 4. BCSS mínimo
 
@@ -256,9 +259,9 @@ El acceso a cómputo reduce restricciones de entrenamiento, pero no reemplaza un
 
 ## Pendientes operativos
 
-- Confirmar instalación de OpenSlide en macOS y Linux.
-- Confirmar instalación de TIAToolbox.
-- Verificar compatibilidad real de `fcn_resnet50_unet-bcss`.
+- Evaluar la comparación baseline vs `smart_tissue_nuclei_v2_light` en más WSIs.
+- Incorporar ground truth BCSS para medir cobertura por clase cuando esté disponible.
+- Ejecutar segmentación semántica posterior sobre los patches seleccionados para generar overlays revisables.
 - Validar combinación PyTorch/CUDA en iHealth o NLHPC.
 - Definir clases finales del PMV.
 - Definir formato de salida requerido por el grupo de cuantificación.

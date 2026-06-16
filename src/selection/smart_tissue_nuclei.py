@@ -281,7 +281,7 @@ def _select_candidates_to_score(
 
 
 def run_smart_tissue_nuclei_selection(config: SmartTissueNucleiConfig) -> dict[str, Any]:
-    """Run smart_tissue_nuclei_v1 and write comparable selection outputs."""
+    """Run a smart tissue/nuclei selector and write comparable selection outputs."""
     start_time = time.perf_counter()
     root_dir = config.root_dir.resolve()
     wsi_path = config.wsi_path.expanduser().resolve()

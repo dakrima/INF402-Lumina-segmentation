@@ -20,6 +20,8 @@ El foco del repositorio es:
 - evaluación con métricas de segmentación cuando exista ground truth;
 - posible fine-tuning si el baseline preentrenado no basta.
 
+Estado de cierre para selección de patches: `baseline_tiatoolbox` queda como baseline comparativo, `smart_tissue_nuclei_v1` como versión intermedia/ablation y `smart_tissue_nuclei_v2_light` como selector propio candidato final del proyecto por ahora.
+
 ## Lo que este proyecto no hace
 
 Este proyecto no:
@@ -223,7 +225,7 @@ python scripts/06_select_wsi_patches.py \
 
 La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` contiene el pool común de candidatos filtrados por thumbnail, mientras que `selected_metadata.csv` contiene solo los patches seleccionados.
 
-Limitación actual: este baseline tipo TIAToolbox no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. La separación entre pool de candidatos y seleccionados prepara la comparación justa con `smart_tissue_nuclei_v1` bajo el mismo presupuesto de patches.
+Limitación actual: este baseline tipo TIAToolbox no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. La separación entre pool de candidatos y seleccionados permite una comparación justa contra `smart_tissue_nuclei_v1` y `smart_tissue_nuclei_v2_light` bajo el mismo presupuesto de patches.
 
 ## Etapa 2 - smart_tissue_nuclei_v1
 
@@ -245,11 +247,11 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-`--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. El siguiente paso es comparar formalmente `baseline_tiatoolbox` contra `smart_tissue_nuclei_v1` con el mismo pool y presupuesto de patches.
+`--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. `smart_tissue_nuclei_v1` se conserva como versión intermedia/ablation para contrastar contra el baseline y contra v2_light.
 
 ## Etapa 2.1 - smart_tissue_nuclei_v2_light
 
-`smart_tissue_nuclei_v2_light` mejora el selector propio con tres mecanismos livianos: proxy nuclear por HED color deconvolution, cuotas espaciales suaves por región y diversidad simple por features. Mantiene el mismo pool thumbnail-filtered y no usa modelos deep learning.
+`smart_tissue_nuclei_v2_light` mejora el selector propio con tres mecanismos livianos: proxy nuclear por HED color deconvolution, cuotas espaciales suaves por región y diversidad simple por features. Mantiene el mismo pool thumbnail-filtered, no usa modelos deep learning y queda congelado por ahora como selector propio candidato final.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
@@ -277,18 +279,18 @@ Los outputs agregan trazabilidad de `nuclear_proxy`, región espacial, cuotas y 
 
 ## Etapa 3 - comparación de selectores
 
-La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados:
+La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
   --baseline-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
-  --smart-dir outputs/patch_selection/smart_tcga_a2_a3xs \
-  --output-dir outputs/patch_selection/comparison_tcga_a2_a3xs \
+  --smart-dir outputs/patch_selection/smart_v2_light_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/comparison_baseline_vs_smart_v2_light_tcga_a2_a3xs \
   --feature-size 256 \
   --overwrite
 ```
 
-La salida incluye `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png` y `comparison_notes.md`. Las métricas cubren conteos, overlap, features recomputadas, diversidad espacial y runtime. Esta etapa no abre la WSI, no ejecuta modelos y no valida desempeño clínico; el siguiente paso es segmentación posterior sobre seleccionados o ajuste de pesos si la comparación lo justifica.
+La salida incluye `comparison_summary.json`, `comparison_metrics.csv`, `selected_overlap.csv`, `comparison_selected_patches.csv`, `comparison_preview.png`, `comparison_preview_selected_only.png` y `comparison_notes.md`. Las métricas cubren conteos, overlap, features recomputadas, diversidad espacial y runtime. Esta etapa no ejecuta modelos ni valida desempeño clínico; para la visualización selected-only puede usar la WSI solo para reconstruir un thumbnail limpio si está disponible.
 
 ## Prueba de carga del baseline TIAToolbox
 
@@ -385,10 +387,8 @@ Usar `data/` y `outputs/` solo como estructura local de trabajo.
 
 ## Próximos hitos
 
-1. Verificar ambiente local y Linux GPU.
-2. Probar importación de TIAToolbox/OpenSlide.
-3. Verificar disponibilidad operativa de `fcn_resnet50_unet-bcss` sin descargar pesos de forma implícita.
-4. Ejecutar patching en imágenes pequeñas de prueba.
-5. Preparar lectura y evaluación mínima con BCSS.
-6. Evaluar baseline con overlays y métricas.
-7. Considerar fine-tuning solo si el baseline no basta.
+1. Evaluar la comparación en más WSIs.
+2. Incorporar ground truth BCSS cuando esté disponible para medir cobertura por clase.
+3. Ejecutar segmentación semántica posterior sobre patches seleccionados para generar máscaras/overlays revisables.
+4. Mantener `smart_tissue_nuclei_v2_light` como selector candidato final mientras no exista evidencia experimental para cambiar pesos o features.
+5. Considerar fine-tuning solo si la segmentación posterior no basta.

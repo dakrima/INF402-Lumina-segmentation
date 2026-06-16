@@ -15,8 +15,8 @@ if str(ROOT_DIR) not in sys.path:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare patch selector output folders. This does not open the WSI, "
-            "run segmentation, train models, diagnose, or calculate RCB."
+            "Compare patch selector output folders. This does not run segmentation, "
+            "train models, diagnose, or calculate RCB."
         ),
     )
     parser.add_argument("--baseline-dir", type=Path, required=True)

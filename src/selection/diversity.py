@@ -211,7 +211,7 @@ def select_with_spatial_quotas(
     feature_diversity_weight: float,
     feature_names: list[str],
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
-    """Select records using soft regional quotas and automatic cup redistribution."""
+    """Select records using soft regional quotas and automatic quota redistribution."""
     threshold = score_quantile(records, quota_min_score_quantile)
     eligible = [
         record for record in records

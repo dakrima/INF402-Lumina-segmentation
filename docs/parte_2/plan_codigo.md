@@ -160,6 +160,28 @@ Este baseline genera candidatos por grilla, filtra por máscara/proporción de t
 
 Limitación: todavía no implementa `smart_tissue_nuclei_v1`, señal nuclear, diversidad espacial, ranking inteligente, HoVer-Net, CLAM ni comparación formal. Esa comparación corresponde a la siguiente etapa usando el mismo pool de candidatos y el mismo presupuesto de patches.
 
+### 3.3. Etapa 2 - smart_tissue_nuclei_v1
+
+El selector propio `smart_tissue_nuclei_v1` parte del mismo candidate pool filtrado por thumbnail y scorea candidatos con heurísticas interpretables: proporción de tejido, señal nuclear/hematoxilina aproximada, entropía visual, nitidez por gradientes, penalización de artefactos y diversidad espacial greedy.
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/smart_tcga_a2_a3xs \
+  --selector smart_tissue_nuclei_v1 \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 300 \
+  --feature-size 256 \
+  --lambda-spatial 0.15 \
+  --overwrite
+```
+
+El flujo es memory-safe para CPU: no carga la WSI completa, no guarda todos los patches en memoria, lee candidatos uno por uno y calcula features sobre patches reducidos. `candidate_metadata.csv` conserva todo el pool; solo los candidatos scoreados tienen columnas de features completas. El siguiente hito es una comparación formal baseline vs selector propio con métricas de cobertura, redundancia, diversidad y costo.
+
 ### 4. BCSS mínimo
 
 Incorporar BCSS como dataset principal de segmentación semántica cuando se definan rutas, permisos y formato de descarga. No se debe subir BCSS al repositorio.

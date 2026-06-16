@@ -225,6 +225,28 @@ La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`
 
 Limitación actual: este baseline tipo TIAToolbox no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. La separación entre pool de candidatos y seleccionados prepara la comparación justa con `smart_tissue_nuclei_v1` bajo el mismo presupuesto de patches.
 
+## Etapa 2 - smart_tissue_nuclei_v1
+
+El selector propio `smart_tissue_nuclei_v1` usa el mismo pool común de candidatos filtrados por thumbnail y scorea una muestra reproducible de candidatos con features simples: `tissue_ratio`, `nuclear_signal`, `visual_entropy`, `blur_score`, `artifact_penalty` y penalización espacial greedy.
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/smart_tcga_a2_a3xs \
+  --selector smart_tissue_nuclei_v1 \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 300 \
+  --feature-size 256 \
+  --lambda-spatial 0.15 \
+  --overwrite
+```
+
+`--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. El siguiente paso es comparar formalmente `baseline_tiatoolbox` contra `smart_tissue_nuclei_v1` con el mismo pool y presupuesto de patches.
+
 ## Prueba de carga del baseline TIAToolbox
 
 Después de activar el ambiente reproducible, se puede ejecutar una prueba de carga del modelo preentrenado BCSS:

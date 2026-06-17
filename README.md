@@ -272,6 +272,42 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 La salida sigue siendo compatible con `scripts/07_compare_patch_selectors.py`, `scripts/08_segment_selected_patches.py` y `scripts/09_compare_segmentation_on_selected_patches.py`.
 
+## Etapa 2.3 - v4_embedding_assisted
+
+`v4_embedding_assisted` extiende `v3_server_quality` con embeddings UNI como representación morfológica. Los embeddings se usan para favorecer diversidad visual, balance de clusters y reducción de redundancia entre patches. UNI no se usa como clasificador clínico, no entrega ground truth y no reemplaza la segmentación posterior.
+
+Esta etapa no usa `fcn_resnet50_unet-bcss` para seleccionar patches y no ejecuta segmentación preliminar. El modelo de segmentación sigue siendo una etapa posterior para generar máscaras/overlays revisables.
+
+Requiere configurar acceso local a UNI mediante `--embedding-model-path` o reutilizar un cache de embeddings compatible. El script no descarga pesos automáticamente, no guarda tokens y no debe versionar pesos ni caches.
+
+En el entorno local del repo se validó la integración y la falla limpia cuando UNI no está disponible; la ejecución real con UNI requiere entregar una ruta local válida mediante `--embedding-model-path` o un cache compatible.
+
+Ejemplo de comando:
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/v4_embedding_assisted_smoke \
+  --selector v4_embedding_assisted \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 4 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 50 \
+  --feature-size 256 \
+  --quota-grid 2x2 \
+  --embedding-backend uni \
+  --embedding-model-path /PATH/TO/UNI/MODEL_OR_CHECKPOINT \
+  --embedding-device auto \
+  --embedding-batch-size 8 \
+  --cache-embeddings \
+  --reuse-embedding-cache \
+  --overwrite
+```
+
+Las salidas mantienen compatibilidad con las etapas posteriores y agregan `embedding_cache.npz`, `embedding_cache_metadata.json` y `embedding_cluster_summary.csv` cuando se calculan embeddings.
+
 ## Etapa 3 - comparación de selectores
 
 La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:

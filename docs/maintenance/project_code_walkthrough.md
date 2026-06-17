@@ -318,16 +318,18 @@ Tipo: core de selección de patches.
 
 Propósito: entrada CLI para ejecutar `baseline_tiatoolbox`,
 `smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light` o
-`v3_server_quality`.
+`v3_server_quality` o `v4_embedding_assisted`.
 
 Módulos internos:
 
 - `src.selection.BaselineSelectionConfig`
 - `src.selection.SmartTissueNucleiConfig`
 - `src.selection.V3ServerQualityConfig`
+- `src.selection.V4EmbeddingAssistedConfig`
 - `src.selection.run_baseline_selection`
 - `src.selection.run_smart_tissue_nuclei_selection`
 - `src.selection.run_v3_server_quality_selection`
+- `src.selection.run_v4_embedding_assisted_selection`
 
 Inputs principales:
 
@@ -343,6 +345,9 @@ Inputs principales:
   `--nuclear-proxy`, `--spatial-strategy`, `--diversity-strategy`
 - parámetros v3 como `--min-quality-score`, `--redundancy-penalty-weight`,
   `--cache-features`, `--resume` y `--output-mode`
+- parámetros v4 como `--embedding-model-path`, `--embedding-device`,
+  `--embedding-batch-size`, `--embedding-cluster-count` y
+  `--reuse-embedding-cache`
 
 Outputs:
 
@@ -918,8 +923,42 @@ Qué no hace:
 - no calcula RCB;
 - no valida clínicamente los patches.
 
-Rol actual: selector server-quality no model-assisted. Sirve como paso
-intermedio antes de una futura versión `v4_model_assisted`.
+Rol actual: selector server-quality no model-assisted. Sirve como base técnica
+para `v4_embedding_assisted`.
+
+### 6.5 `v4_embedding_assisted`
+
+`v4_embedding_assisted` extiende `v3_server_quality` con embeddings UNI. El
+módulo principal es `src/selection/v4_embedding_assisted.py` y el soporte de
+embeddings vive en `src/selection/embedding_scoring.py`.
+
+Qué agrega:
+
+- carga modular de UNI desde pesos/modelo local;
+- cache de embeddings en `embedding_cache.npz`;
+- metadata de cache en `embedding_cache_metadata.json`;
+- clustering morfológico de candidatos scoreados;
+- balance de clusters;
+- representatividad respecto a centroides;
+- penalización por redundancia morfológica;
+- bonus de diversidad por embedding.
+
+Qué no hace:
+
+- no usa `fcn_resnet50_unet-bcss` para seleccionar;
+- no ejecuta segmentación preliminar;
+- no descarga pesos automáticamente;
+- no guarda tokens;
+- no usa UNI como detector clínico;
+- no calcula RCB ni valida clínicamente.
+
+Si UNI no está disponible y no existe cache compatible, el selector debe fallar
+con un mensaje accionable en vez de simular embeddings.
+
+En el entorno local actual se validó la integración y la falla limpia sin pesos
+UNI. La ejecución real con UNI requiere proporcionar `--embedding-model-path` o
+un cache compatible generado con el mismo backend, modelo, métrica, dimensión y
+conjunto de candidatos.
 
 ## 7. Modelo de segmentación TIAToolbox
 
@@ -1063,6 +1102,7 @@ referencia histórica.
 | `smart_tissue_nuclei_v1` | No | Ninguno | selección técnica con features/proxies visuales | no usa segmentación, no detecta tumor |
 | `smart_tissue_nuclei_v2_light` | No | Ninguno | selección técnica con HED proxy, cuotas y diversidad | no usa DL, no valida clínicamente |
 | `v3_server_quality` | No | Ninguno | selección técnica server-quality con proxies de utilidad, diversidad y baja redundancia | no usa modelo de segmentación, no diagnostica |
+| `v4_embedding_assisted` | Sí, solo como extractor de embeddings | UNI | representación morfológica para diversidad, clusters y reducción de redundancia | no usa segmentación para seleccionar, no diagnostica |
 | TIAToolbox segmentation | Sí | `fcn_resnet50_unet-bcss` | segmentación semántica posterior sobre patches seleccionados | no selecciona patches, no produce ground truth clínico |
 | Evaluación BCSS futura | No implementado como flujo completo | Pendiente | comparar predicción vs ground truth cuando exista integración | no forma parte central de resultados actuales |
 

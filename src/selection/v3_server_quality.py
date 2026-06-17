@@ -96,20 +96,36 @@ V3_FEATURE_DIVERSITY_FIELDS = [
     "y_norm",
 ]
 
+V3_NORMALIZED_FIELDS = [
+    "tissue_ratio_norm",
+    "nuclear_signal_rgb_norm",
+    "nuclear_signal_hed_norm",
+    "visual_entropy_norm",
+    "blur_score_norm",
+    "artifact_penalty_norm",
+    "thumbnail_tissue_ratio_norm",
+    "x_norm",
+    "y_norm",
+]
+
+V3_CRITICAL_NUMERIC_FIELDS = [
+    "technical_quality_score",
+    "heterogeneity_score",
+    "cellularity_proxy_score",
+    "residual_candidate_proxy",
+    "low_cellularity_treated_bed_proxy",
+    "tumor_bed_relevance_proxy",
+    "usefulness_score",
+    "redundancy_penalty",
+    "score_final",
+]
+
 SCORED_CANDIDATE_FIELDS = list(
     dict.fromkeys(
         [
             *CANDIDATE_METADATA_FIELDS,
             "feature_size",
-            "tissue_ratio_norm",
-            "nuclear_signal_rgb_norm",
-            "nuclear_signal_hed_norm",
-            "visual_entropy_norm",
-            "blur_score_norm",
-            "artifact_penalty_norm",
-            "thumbnail_tissue_ratio_norm",
-            "x_norm",
-            "y_norm",
+            *V3_NORMALIZED_FIELDS,
         ]
     )
 )
@@ -868,6 +884,7 @@ def _update_candidate_row_from_record(row: dict[str, object], record: dict[str, 
         "score_raw",
         "score_final",
         "usefulness_reason",
+        *V3_NORMALIZED_FIELDS,
     ]
     row["evaluated"] = True
     row["scored"] = True
@@ -880,6 +897,30 @@ def _update_candidate_row_from_record(row: dict[str, object], record: dict[str, 
     row["quota_grid"] = record.get("quota_grid", row.get("quota_grid", ""))
     row["selected"] = bool(record.get("selected", False))
     row["rank"] = record.get("rank", "")
+
+
+def _sanitize_numeric_fields(
+    records: list[dict[str, object]],
+    field_names: list[str],
+) -> list[str]:
+    """Replace non-finite critical numeric values with 0.0 and report warnings."""
+    warnings: list[str] = []
+    for field_name in field_names:
+        repaired_count = 0
+        for record in records:
+            value = record.get(field_name)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                number = math.nan
+            if not math.isfinite(number):
+                record[field_name] = 0.0
+                repaired_count += 1
+        if repaired_count:
+            warnings.append(
+                f"Replaced {repaired_count} non-finite values in {field_name} with 0.0."
+            )
+    return warnings
 
 
 def _score_statistics(records: list[dict[str, object]], field_name: str) -> dict[str, float | None]:
@@ -1016,6 +1057,12 @@ def run_v3_server_quality_selection(config: V3ServerQualityConfig) -> dict[str, 
             min_distance_level0=min_distance_level0,
         )
         warnings.extend(selection_warnings)
+        warnings.extend(
+            _sanitize_numeric_fields(
+                scored_records,
+                [*V3_CRITICAL_NUMERIC_FIELDS, *V3_NORMALIZED_FIELDS],
+            )
+        )
 
         for record in scored_records:
             row = candidate_rows_by_id[str(record["candidate_id"])]

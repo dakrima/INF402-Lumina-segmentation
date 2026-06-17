@@ -16,6 +16,11 @@ from src.selection.v3_server_quality import (
     V3ServerQualityConfig,
     run_v3_server_quality_selection,
 )
+from src.selection.v4_embedding_assisted import (
+    V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
+    V4EmbeddingAssistedConfig,
+    run_v4_embedding_assisted_selection,
+)
 
 __all__ = [
     "BASELINE_SELECTOR_NAME",
@@ -25,7 +30,10 @@ __all__ = [
     "SmartTissueNucleiConfig",
     "V3_SERVER_QUALITY_SELECTOR_NAME",
     "V3ServerQualityConfig",
+    "V4_EMBEDDING_ASSISTED_SELECTOR_NAME",
+    "V4EmbeddingAssistedConfig",
     "run_baseline_selection",
     "run_smart_tissue_nuclei_selection",
     "run_v3_server_quality_selection",
+    "run_v4_embedding_assisted_selection",
 ]

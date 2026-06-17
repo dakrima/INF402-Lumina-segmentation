@@ -308,6 +308,45 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 Las salidas mantienen compatibilidad con las etapas posteriores y agregan `embedding_cache.npz`, `embedding_cache_metadata.json` y `embedding_cluster_summary.csv` cuando se calculan embeddings.
 
+## Etapa 2.4 - v4_1_medical_embedding_assisted
+
+`v4_1_medical_embedding_assisted` es una variante conservadora de `v4_embedding_assisted`. Mantiene `v3_server_quality` como base dominante, agrega proxies clasicos de procesamiento de imagen medica y usa UNI solo como reranker morfologico dentro de candidatos tecnicamente fuertes.
+
+Las features nuevas describen calidad tecnica de tincion/intensidad, mascara de tejido, textura, nitidez, artefactos y pseudo-celularidad basada en hematoxilina. Son proxies reproducibles para seleccion de patches; no son diagnostico, no segmentan nucleos reales, no calculan RCB y no constituyen validacion clinica.
+
+La estrategia por defecto filtra candidatos por `score_v3_base`, calidad/utilidad medica y penalizacion de artefactos antes de usar embeddings UNI para diversidad morfologica controlada. La seleccion no usa `fcn_resnet50_unet-bcss` ni ejecuta segmentacion preliminar.
+
+Ejemplo de comando con cache UNI compatible:
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --selector v4_1_medical_embedding_assisted \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 16 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 1000 \
+  --feature-size 512 \
+  --quota-grid 4x4 \
+  --embedding-backend uni \
+  --embedding-model-path /Users/davidkripper/models/uni/pytorch_model.bin \
+  --embedding-cache-path outputs/patch_selection/v4_embedding_assisted_tcga_a2_a3xs/embedding_cache.npz \
+  --embedding-device auto \
+  --embedding-batch-size 2 \
+  --cache-embeddings \
+  --reuse-embedding-cache \
+  --medical-min-quality-score 0.50 \
+  --medical-min-utility-score 0.45 \
+  --min-score-v3-base-quantile 0.80 \
+  --medical-top-quantile 0.20 \
+  --medical-artifact-max 0.12 \
+  --medical-rerank-mode top_v3_then_embedding \
+  --overwrite
+```
+
 ## Etapa 3 - comparación de selectores
 
 La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:

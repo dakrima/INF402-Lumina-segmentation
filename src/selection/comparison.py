@@ -67,6 +67,13 @@ COMPARISON_SELECTED_PATCH_FIELDS = [
     "score_raw",
     "score_final",
 ]
+MEDICAL_COMPARISON_FIELDS = [
+    "medical_image_quality_score",
+    "medical_image_utility_score",
+    "medical_texture_score",
+    "medical_pseudo_cellularity_score",
+    "medical_artifact_penalty",
+]
 SHARED_CONFIG_FIELDS = [
     "wsi_path",
     "patch_size",
@@ -386,6 +393,105 @@ def _method_feature_stats(
     return result
 
 
+def _selected_metadata_stats(run: SelectorRun, field_names: list[str]) -> dict[str, dict[str, float | None]]:
+    return _method_feature_stats(run.selected_rows, field_names)
+
+
+def _selected_cluster_metrics(run: SelectorRun) -> dict[str, float | None]:
+    cluster_ids = [
+        str(row.get("embedding_cluster_id", ""))
+        for row in run.selected_rows
+        if str(row.get("embedding_cluster_id", "")).strip()
+    ]
+    if not cluster_ids:
+        return {
+            "num_embedding_clusters_covered": None,
+            "selected_cluster_entropy": None,
+        }
+    counts: dict[str, int] = {}
+    for cluster_id in cluster_ids:
+        counts[cluster_id] = counts.get(cluster_id, 0) + 1
+    total = float(sum(counts.values()))
+    probabilities = [count / total for count in counts.values() if count > 0]
+    entropy = -sum(probability * math.log2(probability) for probability in probabilities)
+    max_entropy = math.log2(len(counts)) if len(counts) > 1 else 1.0
+    return {
+        "num_embedding_clusters_covered": float(len(counts)),
+        "selected_cluster_entropy": float(entropy / max_entropy) if max_entropy > 0 else 0.0,
+    }
+
+
+def _embedding_distance_metrics(run: SelectorRun) -> dict[str, float | None]:
+    empty = {
+        "mean_pairwise_embedding_distance": None,
+        "median_pairwise_embedding_distance": None,
+        "min_pairwise_embedding_distance": None,
+    }
+    cache_path_value = run.summary.get("embedding_cache_path") or run.method_config.get("embedding_cache_path")
+    if not cache_path_value:
+        return empty
+    cache_path = Path(str(cache_path_value)).expanduser()
+    if not cache_path.exists():
+        return empty
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        return empty
+
+    try:
+        with np.load(cache_path, allow_pickle=True) as data:
+            embeddings = np.asarray(data["embeddings"], dtype=np.float32)
+            candidate_ids = [str(value) for value in data["candidate_ids"].tolist()]
+    except Exception:
+        return empty
+    if embeddings.ndim != 2 or embeddings.shape[0] != len(candidate_ids):
+        return empty
+    candidate_by_xy = _candidate_lookup_by_xy(run.candidate_rows)
+    index_by_id = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+    selected_indices: list[int] = []
+    for row in run.selected_rows:
+        x_level0 = _to_int(row.get("x_level0"))
+        y_level0 = _to_int(row.get("y_level0"))
+        if x_level0 is None or y_level0 is None:
+            continue
+        candidate_id = candidate_by_xy.get((x_level0, y_level0))
+        if candidate_id in index_by_id:
+            selected_indices.append(index_by_id[candidate_id])
+    if len(selected_indices) < 2:
+        return empty
+    selected_embeddings = embeddings[selected_indices]
+    norms = np.linalg.norm(selected_embeddings, axis=1, keepdims=True)
+    selected_embeddings = selected_embeddings / np.where(norms <= 1e-12, 1.0, norms)
+    similarities = selected_embeddings @ selected_embeddings.T
+    distances: list[float] = []
+    for row_index in range(similarities.shape[0]):
+        for col_index in range(row_index + 1, similarities.shape[1]):
+            distances.append(float(max(0.0, min(2.0, 1.0 - similarities[row_index, col_index]))))
+    if not distances:
+        return empty
+    return {
+        "mean_pairwise_embedding_distance": float(statistics.mean(distances)),
+        "median_pairwise_embedding_distance": float(statistics.median(distances)),
+        "min_pairwise_embedding_distance": float(min(distances)),
+    }
+
+
+def compute_optional_selector_metrics(baseline: SelectorRun, smart: SelectorRun) -> dict[str, Any]:
+    """Compute optional selector metrics when metadata/cache fields are present."""
+    return {
+        "baseline": {
+            "medical": _selected_metadata_stats(baseline, MEDICAL_COMPARISON_FIELDS),
+            "embedding_clusters": _selected_cluster_metrics(baseline),
+            "embedding_distances": _embedding_distance_metrics(baseline),
+        },
+        "smart": {
+            "medical": _selected_metadata_stats(smart, MEDICAL_COMPARISON_FIELDS),
+            "embedding_clusters": _selected_cluster_metrics(smart),
+            "embedding_distances": _embedding_distance_metrics(smart),
+        },
+    }
+
+
 def recompute_selected_patch_features(
     run: SelectorRun,
     records: list[dict[str, object]],
@@ -560,6 +666,7 @@ def build_comparison_metrics_rows(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
     spatial_metrics: dict[str, Any],
+    optional_selector_metrics: dict[str, Any],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     count_metrics = [
@@ -699,6 +806,43 @@ def build_comparison_metrics_rows(
                 spatial_metrics["smart"].get(metric),
                 higher_is_better=True,
                 interpretation="Higher value suggests broader spatial dispersion, not clinical superiority.",
+            )
+        )
+    for field_name in MEDICAL_COMPARISON_FIELDS:
+        rows.append(
+            _metric_row(
+                f"mean_{field_name}",
+                optional_selector_metrics["baseline"]["medical"][field_name]["mean"],
+                optional_selector_metrics["smart"]["medical"][field_name]["mean"],
+                higher_is_better=False if field_name == "medical_artifact_penalty" else True,
+                interpretation="Optional v4.1 medical-image proxy; heuristic and technical only.",
+            )
+        )
+    for metric in [
+        "num_embedding_clusters_covered",
+        "selected_cluster_entropy",
+    ]:
+        rows.append(
+            _metric_row(
+                metric,
+                optional_selector_metrics["baseline"]["embedding_clusters"].get(metric),
+                optional_selector_metrics["smart"]["embedding_clusters"].get(metric),
+                higher_is_better=True,
+                interpretation="Optional embedding-cluster diversity metric; descriptive only.",
+            )
+        )
+    for metric in [
+        "mean_pairwise_embedding_distance",
+        "median_pairwise_embedding_distance",
+        "min_pairwise_embedding_distance",
+    ]:
+        rows.append(
+            _metric_row(
+                metric,
+                optional_selector_metrics["baseline"]["embedding_distances"].get(metric),
+                optional_selector_metrics["smart"]["embedding_distances"].get(metric),
+                higher_is_better=True,
+                interpretation="Optional UNI embedding distance metric when compatible cache is available.",
             )
         )
     return rows
@@ -1100,6 +1244,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         "baseline": compute_spatial_metrics(baseline_records, baseline.summary),
         "smart": compute_spatial_metrics(smart_records, smart.summary),
     }
+    optional_selector_metrics = compute_optional_selector_metrics(baseline, smart)
     runtime_metrics = {
         "baseline_runtime_seconds": baseline.summary.get("runtime_seconds"),
         "smart_runtime_seconds": smart.summary.get("runtime_seconds"),
@@ -1114,6 +1259,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         overlap_metrics=overlap_metrics,
         feature_metrics=feature_metrics,
         spatial_metrics=spatial_metrics,
+        optional_selector_metrics=optional_selector_metrics,
     )
 
     comparison_metrics_path = output_dir / "comparison_metrics.csv"
@@ -1168,6 +1314,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
             "nuclear_signal_hed_recomputed": "Explicit HED stain-deconvolution heuristic recomputed on selected PNGs; not nuclear segmentation.",
         },
         "spatial_metrics": spatial_metrics,
+        "optional_selector_metrics": optional_selector_metrics,
         "runtime_metrics": runtime_metrics,
         "interpretation": interpretation,
         "outputs": {

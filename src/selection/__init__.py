@@ -21,6 +21,11 @@ from src.selection.v4_embedding_assisted import (
     V4EmbeddingAssistedConfig,
     run_v4_embedding_assisted_selection,
 )
+from src.selection.v4_1_medical_embedding_assisted import (
+    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+    V41MedicalEmbeddingAssistedConfig,
+    run_v4_1_medical_embedding_assisted_selection,
+)
 
 __all__ = [
     "BASELINE_SELECTOR_NAME",
@@ -32,8 +37,11 @@ __all__ = [
     "V3ServerQualityConfig",
     "V4_EMBEDDING_ASSISTED_SELECTOR_NAME",
     "V4EmbeddingAssistedConfig",
+    "V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME",
+    "V41MedicalEmbeddingAssistedConfig",
     "run_baseline_selection",
     "run_smart_tissue_nuclei_selection",
     "run_v3_server_quality_selection",
     "run_v4_embedding_assisted_selection",
+    "run_v4_1_medical_embedding_assisted_selection",
 ]

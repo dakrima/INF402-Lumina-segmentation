@@ -16,12 +16,14 @@ SMART_SELECTOR_NAME = "smart_tissue_nuclei_v1"
 SMART_V2_LIGHT_SELECTOR_NAME = "smart_tissue_nuclei_v2_light"
 V3_SERVER_QUALITY_SELECTOR_NAME = "v3_server_quality"
 V4_EMBEDDING_ASSISTED_SELECTOR_NAME = "v4_embedding_assisted"
+V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME = "v4_1_medical_embedding_assisted"
 SUPPORTED_SELECTORS = (
     BASELINE_SELECTOR_NAME,
     SMART_SELECTOR_NAME,
     SMART_V2_LIGHT_SELECTOR_NAME,
     V3_SERVER_QUALITY_SELECTOR_NAME,
     V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
+    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
 )
 
 
@@ -151,104 +153,146 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--embedding-backend",
         default="uni",
-        help="For v4_embedding_assisted. Embedding backend; currently uni.",
+        help="For v4/v4.1 embedding-assisted selectors. Embedding backend; currently uni.",
     )
     parser.add_argument(
         "--embedding-model-name",
         default="UNI",
-        help="For v4_embedding_assisted. Embedding model label written to manifests.",
+        help="For v4/v4.1 embedding-assisted selectors. Embedding model label written to manifests.",
     )
     parser.add_argument(
         "--embedding-model-path",
         type=Path,
         default=None,
-        help="For v4_embedding_assisted. Local path to UNI weights/checkpoint/TorchScript.",
+        help="For v4/v4.1 embedding-assisted selectors. Local path to UNI weights/checkpoint/TorchScript.",
     )
     parser.add_argument(
         "--embedding-device",
         choices=("auto", "cpu", "cuda", "mps"),
         default="auto",
-        help="For v4_embedding_assisted. Device used for embedding extraction.",
+        help="For v4/v4.1 embedding-assisted selectors. Device used for embedding extraction.",
     )
     parser.add_argument(
         "--embedding-batch-size",
         type=int,
         default=32,
-        help="For v4_embedding_assisted. Patch batch size for embedding extraction.",
+        help="For v4/v4.1 embedding-assisted selectors. Patch batch size for embedding extraction.",
     )
     parser.add_argument(
         "--embedding-num-workers",
         type=int,
         default=2,
-        help="For v4_embedding_assisted. Reserved worker count for embedding extraction.",
+        help="For v4/v4.1 embedding-assisted selectors. Reserved worker count for embedding extraction.",
     )
     parser.add_argument(
         "--embedding-cache-path",
         type=Path,
         default=None,
-        help="For v4_embedding_assisted. Optional output-local or absolute .npz cache path.",
+        help="For v4/v4.1 embedding-assisted selectors. Optional output-local or absolute .npz cache path.",
     )
     parser.add_argument(
         "--cache-embeddings",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="For v4_embedding_assisted. Write embedding_cache.npz and metadata.",
+        help="For v4/v4.1 embedding-assisted selectors. Write embedding_cache.npz and metadata.",
     )
     parser.add_argument(
         "--reuse-embedding-cache",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="For v4_embedding_assisted. Reuse a compatible embedding cache when available.",
+        help="For v4/v4.1 embedding-assisted selectors. Reuse a compatible embedding cache when available.",
     )
     parser.add_argument(
         "--embedding-dim",
         type=int,
         default=None,
-        help="For v4_embedding_assisted. Optional expected embedding dimension.",
+        help="For v4/v4.1 embedding-assisted selectors. Optional expected embedding dimension.",
     )
     parser.add_argument(
         "--embedding-distance-metric",
         choices=("cosine",),
         default="cosine",
-        help="For v4_embedding_assisted. Distance metric used for morphology embeddings.",
+        help="For v4/v4.1 embedding-assisted selectors. Distance metric used for morphology embeddings.",
     )
     parser.add_argument(
         "--embedding-diversity-weight",
         type=float,
-        default=0.20,
-        help="For v4_embedding_assisted. Greedy morphology diversity bonus weight.",
+        default=None,
+        help="For v4/v4.1 embedding-assisted selectors. Greedy morphology diversity bonus weight.",
     )
     parser.add_argument(
         "--embedding-redundancy-weight",
         type=float,
-        default=0.15,
-        help="For v4_embedding_assisted. Embedding similarity redundancy penalty weight.",
+        default=None,
+        help="For v4/v4.1 embedding-assisted selectors. Embedding similarity redundancy penalty weight.",
     )
     parser.add_argument(
         "--embedding-cluster-count",
         type=int,
         default=8,
-        help="For v4_embedding_assisted. Number of morphology clusters.",
+        help="For v4/v4.1 embedding-assisted selectors. Number of morphology clusters.",
     )
     parser.add_argument(
         "--cluster-balance-weight",
         type=float,
-        default=0.10,
-        help="For v4_embedding_assisted. Weight for underrepresented cluster balance.",
+        default=None,
+        help="For v4/v4.1 embedding-assisted selectors. Weight for underrepresented cluster balance.",
     )
     parser.add_argument(
         "--representative-cluster-weight",
         type=float,
-        default=0.10,
-        help="For v4_embedding_assisted. Weight for closeness to embedding cluster centroid.",
+        default=None,
+        help="For v4/v4.1 embedding-assisted selectors. Weight for closeness to embedding cluster centroid.",
     )
     parser.add_argument(
         "--allow-no-embedding-fallback",
         action="store_true",
         help=(
-            "For v4_embedding_assisted. Deprecated compatibility flag; v4 does not "
+            "For v4/v4.1 embedding-assisted selectors. Deprecated compatibility flag; v4 does not "
             "simulate embeddings and requires a local UNI model path or compatible cache."
         ),
+    )
+    parser.add_argument(
+        "--medical-min-quality-score",
+        type=float,
+        default=0.50,
+        help="For v4_1_medical_embedding_assisted. Minimum medical image quality proxy.",
+    )
+    parser.add_argument(
+        "--medical-min-utility-score",
+        type=float,
+        default=0.45,
+        help="For v4_1_medical_embedding_assisted. Minimum medical image utility proxy.",
+    )
+    parser.add_argument(
+        "--min-score-v3-base-quantile",
+        type=float,
+        default=0.80,
+        help="For v4_1_medical_embedding_assisted. Minimum v3-base quantile before medical reranking.",
+    )
+    parser.add_argument(
+        "--medical-top-k-candidates",
+        type=int,
+        default=None,
+        help="For v4_1_medical_embedding_assisted. Optional cap for top medical candidates.",
+    )
+    parser.add_argument(
+        "--medical-top-quantile",
+        type=float,
+        default=0.20,
+        help="For v4_1_medical_embedding_assisted. Fraction of v3-top candidates retained by medical utility.",
+    )
+    parser.add_argument(
+        "--medical-artifact-max",
+        type=float,
+        default=0.12,
+        help="For v4_1_medical_embedding_assisted. Maximum medical artifact penalty for strict eligibility.",
+    )
+    parser.add_argument(
+        "--medical-rerank-mode",
+        choices=("top_v3_then_embedding",),
+        default="top_v3_then_embedding",
+        help="For v4_1_medical_embedding_assisted. Conservative reranking strategy.",
     )
     parser.add_argument(
         "--overwrite",
@@ -276,10 +320,13 @@ def main() -> int:
             V3ServerQualityConfig,
             V4_EMBEDDING_ASSISTED_SELECTOR_NAME as PACKAGE_V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
             V4EmbeddingAssistedConfig,
+            V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME as PACKAGE_V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+            V41MedicalEmbeddingAssistedConfig,
             run_baseline_selection,
             run_smart_tissue_nuclei_selection,
             run_v3_server_quality_selection,
             run_v4_embedding_assisted_selection,
+            run_v4_1_medical_embedding_assisted_selection,
         )
     except ModuleNotFoundError as exc:
         print(f"[FAIL] Missing Python dependency: {exc.name}")
@@ -399,7 +446,7 @@ def main() -> int:
             output_mode=args.output_mode,
         )
         runner = run_v3_server_quality_selection
-    else:
+    elif args.selector == V4_EMBEDDING_ASSISTED_SELECTOR_NAME:
         if PACKAGE_V4_EMBEDDING_ASSISTED_SELECTOR_NAME != V4_EMBEDDING_ASSISTED_SELECTOR_NAME:
             print("[FAIL] Internal selector constant mismatch for v4_embedding_assisted.")
             return 1
@@ -418,6 +465,26 @@ def main() -> int:
             args.feature_diversity_weight
             if args.feature_diversity_weight is not None
             else 0.15
+        )
+        embedding_diversity_weight = (
+            args.embedding_diversity_weight
+            if args.embedding_diversity_weight is not None
+            else 0.20
+        )
+        embedding_redundancy_weight = (
+            args.embedding_redundancy_weight
+            if args.embedding_redundancy_weight is not None
+            else 0.15
+        )
+        cluster_balance_weight = (
+            args.cluster_balance_weight
+            if args.cluster_balance_weight is not None
+            else 0.10
+        )
+        representative_cluster_weight = (
+            args.representative_cluster_weight
+            if args.representative_cluster_weight is not None
+            else 0.10
         )
         config = V4EmbeddingAssistedConfig(
             wsi_path=args.wsi_path,
@@ -454,14 +521,103 @@ def main() -> int:
             reuse_embedding_cache=args.reuse_embedding_cache,
             embedding_dim=args.embedding_dim,
             embedding_distance_metric=args.embedding_distance_metric,
-            embedding_diversity_weight=args.embedding_diversity_weight,
-            embedding_redundancy_weight=args.embedding_redundancy_weight,
+            embedding_diversity_weight=embedding_diversity_weight,
+            embedding_redundancy_weight=embedding_redundancy_weight,
             embedding_cluster_count=args.embedding_cluster_count,
-            cluster_balance_weight=args.cluster_balance_weight,
-            representative_cluster_weight=args.representative_cluster_weight,
+            cluster_balance_weight=cluster_balance_weight,
+            representative_cluster_weight=representative_cluster_weight,
             allow_no_embedding_fallback=args.allow_no_embedding_fallback,
         )
         runner = run_v4_embedding_assisted_selection
+    else:
+        if PACKAGE_V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME != V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME:
+            print("[FAIL] Internal selector constant mismatch for v4_1_medical_embedding_assisted.")
+            return 1
+        max_candidates_to_score = (
+            args.max_candidates_to_score
+            if args.max_candidates_to_score is not None
+            else 2000
+        )
+        feature_size = args.feature_size if args.feature_size is not None else 512
+        quota_min_score_quantile = (
+            args.quota_min_score_quantile
+            if args.quota_min_score_quantile is not None
+            else 0.20
+        )
+        feature_diversity_weight = (
+            args.feature_diversity_weight
+            if args.feature_diversity_weight is not None
+            else 0.10
+        )
+        embedding_diversity_weight = (
+            args.embedding_diversity_weight
+            if args.embedding_diversity_weight is not None
+            else 0.08
+        )
+        embedding_redundancy_weight = (
+            args.embedding_redundancy_weight
+            if args.embedding_redundancy_weight is not None
+            else 0.08
+        )
+        cluster_balance_weight = (
+            args.cluster_balance_weight
+            if args.cluster_balance_weight is not None
+            else 0.05
+        )
+        representative_cluster_weight = (
+            args.representative_cluster_weight
+            if args.representative_cluster_weight is not None
+            else 0.05
+        )
+        config = V41MedicalEmbeddingAssistedConfig(
+            wsi_path=args.wsi_path,
+            output_dir=args.output_dir,
+            root_dir=ROOT_DIR,
+            selector=args.selector,
+            patch_size=args.patch_size,
+            stride=args.stride,
+            max_patches=args.max_patches,
+            min_tissue_ratio=args.min_tissue_ratio,
+            seed=args.seed,
+            thumbnail_max_size=args.thumbnail_max_size,
+            overwrite=args.overwrite,
+            max_candidates_to_score=max_candidates_to_score,
+            feature_size=feature_size,
+            lambda_spatial=args.lambda_spatial,
+            min_distance_level0=args.min_distance_level0,
+            quota_grid=args.quota_grid,
+            quota_min_score_quantile=quota_min_score_quantile,
+            feature_diversity_weight=feature_diversity_weight,
+            redundancy_penalty_weight=args.redundancy_penalty_weight,
+            min_quality_score=args.min_quality_score,
+            resume=args.resume,
+            cache_features=args.cache_features,
+            output_mode=args.output_mode,
+            embedding_backend=args.embedding_backend,
+            embedding_model_name=args.embedding_model_name,
+            embedding_model_path=args.embedding_model_path,
+            embedding_device=args.embedding_device,
+            embedding_batch_size=args.embedding_batch_size,
+            embedding_num_workers=args.embedding_num_workers,
+            embedding_cache_path=args.embedding_cache_path,
+            cache_embeddings=args.cache_embeddings,
+            reuse_embedding_cache=args.reuse_embedding_cache,
+            embedding_dim=args.embedding_dim,
+            embedding_distance_metric=args.embedding_distance_metric,
+            embedding_diversity_weight=embedding_diversity_weight,
+            embedding_redundancy_weight=embedding_redundancy_weight,
+            embedding_cluster_count=args.embedding_cluster_count,
+            cluster_balance_weight=cluster_balance_weight,
+            representative_cluster_weight=representative_cluster_weight,
+            medical_min_quality_score=args.medical_min_quality_score,
+            medical_min_utility_score=args.medical_min_utility_score,
+            min_score_v3_base_quantile=args.min_score_v3_base_quantile,
+            medical_top_k_candidates=args.medical_top_k_candidates,
+            medical_top_quantile=args.medical_top_quantile,
+            medical_artifact_max=args.medical_artifact_max,
+            medical_rerank_mode=args.medical_rerank_mode,
+        )
+        runner = run_v4_1_medical_embedding_assisted_selection
 
     print("WSI patch selection")
     print("===================")
@@ -477,6 +633,7 @@ def main() -> int:
         SMART_V2_LIGHT_SELECTOR_NAME,
         V3_SERVER_QUALITY_SELECTOR_NAME,
         V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
+        V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
     ):
         print(f"Max candidates to score: {config.max_candidates_to_score}")
         print(f"Feature size: {config.feature_size}")
@@ -486,19 +643,33 @@ def main() -> int:
         print(f"Spatial strategy: {getattr(config, 'spatial_strategy', 'quotas')}")
         print(f"Quota grid: {config.quota_grid}")
         print(f"Diversity strategy: {getattr(config, 'diversity_strategy', 'farthest_feature')}")
-        if args.selector in (V3_SERVER_QUALITY_SELECTOR_NAME, V4_EMBEDDING_ASSISTED_SELECTOR_NAME):
+        if args.selector in (
+            V3_SERVER_QUALITY_SELECTOR_NAME,
+            V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
+            V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+        ):
             print(f"Minimum quality score: {config.min_quality_score}")
             print(f"Redundancy penalty weight: {config.redundancy_penalty_weight}")
             print(f"Cache features: {config.cache_features}")
             print(f"Resume: {config.resume}")
             print(f"Output mode: {config.output_mode}")
-        if args.selector == V4_EMBEDDING_ASSISTED_SELECTOR_NAME:
+        if args.selector in (
+            V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
+            V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+        ):
             print(f"Embedding backend: {config.embedding_backend}")
             print(f"Embedding model name: {config.embedding_model_name}")
             print(f"Embedding model path: {config.embedding_model_path}")
             print(f"Embedding device: {config.embedding_device}")
             print(f"Embedding batch size: {config.embedding_batch_size}")
             print(f"Embedding cluster count: {config.embedding_cluster_count}")
+        if args.selector == V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME:
+            print(f"Medical min quality score: {config.medical_min_quality_score}")
+            print(f"Medical min utility score: {config.medical_min_utility_score}")
+            print(f"Minimum v3 base quantile: {config.min_score_v3_base_quantile}")
+            print(f"Medical top quantile: {config.medical_top_quantile}")
+            print(f"Medical artifact max: {config.medical_artifact_max}")
+            print(f"Medical rerank mode: {config.medical_rerank_mode}")
     print("Clinical warning: technical selection only; not diagnosis, not RCB.")
 
     try:

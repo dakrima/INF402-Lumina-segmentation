@@ -318,7 +318,8 @@ Tipo: core de selección de patches.
 
 Propósito: entrada CLI para ejecutar `baseline_tiatoolbox`,
 `smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light` o
-`v3_server_quality` o `v4_embedding_assisted`.
+`v3_server_quality`, `v4_embedding_assisted` o
+`v4_1_medical_embedding_assisted`.
 
 Módulos internos:
 
@@ -326,10 +327,12 @@ Módulos internos:
 - `src.selection.SmartTissueNucleiConfig`
 - `src.selection.V3ServerQualityConfig`
 - `src.selection.V4EmbeddingAssistedConfig`
+- `src.selection.V41MedicalEmbeddingAssistedConfig`
 - `src.selection.run_baseline_selection`
 - `src.selection.run_smart_tissue_nuclei_selection`
 - `src.selection.run_v3_server_quality_selection`
 - `src.selection.run_v4_embedding_assisted_selection`
+- `src.selection.run_v4_1_medical_embedding_assisted_selection`
 
 Inputs principales:
 
@@ -348,6 +351,10 @@ Inputs principales:
 - parámetros v4 como `--embedding-model-path`, `--embedding-device`,
   `--embedding-batch-size`, `--embedding-cluster-count` y
   `--reuse-embedding-cache`
+- parámetros v4.1 como `--medical-min-quality-score`,
+  `--medical-min-utility-score`, `--min-score-v3-base-quantile`,
+  `--medical-top-quantile`, `--medical-artifact-max` y
+  `--medical-rerank-mode`
 
 Outputs:
 
@@ -960,6 +967,42 @@ UNI. La ejecución real con UNI requiere proporcionar `--embedding-model-path` o
 un cache compatible generado con el mismo backend, modelo, métrica, dimensión y
 conjunto de candidatos.
 
+### 6.6 `v4_1_medical_embedding_assisted`
+
+`v4_1_medical_embedding_assisted` es una variante conservadora de v4. Mantiene
+`v3_server_quality` como score base, agrega features clasicas de procesamiento
+de imagen medica y usa UNI solo como reranker morfologico sobre candidatos
+tecnicamente fuertes.
+
+Modulos principales:
+
+- `src/selection/medical_image_features.py`
+- `src/selection/v4_1_medical_embedding_assisted.py`
+
+Features nuevas:
+
+- calidad de tincion/intensidad como proxy tecnico;
+- mascara de tejido refinada, borde/fondo y fragmentacion;
+- textura y heterogeneidad con entropia, gradientes, laplaciano y GLCM proxy;
+- nitidez con Tenengrad/laplaciano y penalizaciones por intensidades extremas;
+- pseudo-celularidad basada en hematoxilina, sin segmentar nucleos reales.
+
+Estrategia:
+
+1. Scorea candidatos con v3.
+2. Calcula features medicas clasicas.
+3. Filtra candidatos por `score_v3_base`, calidad/utilidad medica y artefactos.
+4. Reutiliza o calcula embeddings UNI.
+5. Selecciona con diversidad espacial y diversidad morfologica controlada.
+
+Que no hace:
+
+- no usa `fcn_resnet50_unet-bcss` para seleccionar;
+- no ejecuta segmentacion preliminar;
+- no diagnostica ni detecta tumor clinicamente;
+- no calcula RCB;
+- no valida clinicamente.
+
 ## 7. Modelo de segmentación TIAToolbox
 
 El modelo usado es:
@@ -1103,6 +1146,7 @@ referencia histórica.
 | `smart_tissue_nuclei_v2_light` | No | Ninguno | selección técnica con HED proxy, cuotas y diversidad | no usa DL, no valida clínicamente |
 | `v3_server_quality` | No | Ninguno | selección técnica server-quality con proxies de utilidad, diversidad y baja redundancia | no usa modelo de segmentación, no diagnostica |
 | `v4_embedding_assisted` | Sí, solo como extractor de embeddings | UNI | representación morfológica para diversidad, clusters y reducción de redundancia | no usa segmentación para seleccionar, no diagnostica |
+| `v4_1_medical_embedding_assisted` | Sí, solo como reranker morfológico | UNI + features clásicas | v3 dominante, calidad médica técnica y diversidad morfológica controlada | no usa segmentación para seleccionar, no diagnostica |
 | TIAToolbox segmentation | Sí | `fcn_resnet50_unet-bcss` | segmentación semántica posterior sobre patches seleccionados | no selecciona patches, no produce ground truth clínico |
 | Evaluación BCSS futura | No implementado como flujo completo | Pendiente | comparar predicción vs ground truth cuando exista integración | no forma parte central de resultados actuales |
 

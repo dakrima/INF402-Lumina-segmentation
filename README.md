@@ -56,9 +56,12 @@ La estrategia inicial de INF402 es formalizar un baseline de extracción tipo TI
 ├── environment.yml
 ├── environment-linux-gpu.yml
 ├── requirements.txt
+├── archive/
+│   └── legacy_small_image_pipeline/
 ├── docs/
 │   ├── parte_1/
-│   └── parte_2/
+│   ├── parte_2/
+│   └── maintenance/
 ├── data/
 │   ├── raw/
 │   ├── external/
@@ -69,13 +72,19 @@ La estrategia inicial de INF402 es formalizar un baseline de extracción tipo TI
 │   ├── masks/
 │   ├── overlays/
 │   ├── metrics/
-│   └── figures/
+│   ├── figures/
+│   ├── patch_selection/
+│   ├── final_patch_selection/
+│   ├── segmentation/
+│   ├── wsi_patches/
+│   ├── model_checks/
+│   └── inference_smoke/
 ├── notebooks/
 ├── scripts/
 └── src/
 ```
 
-`data/` y `outputs/` se mantienen con `.gitkeep`, pero su contenido real está ignorado por Git.
+`data/` y `outputs/` se mantienen con `.gitkeep` cuando corresponde, pero su contenido real está ignorado por Git. Los outputs locales, WSI, checkpoints, patches, máscaras, overlays y métricas pesadas no deben subirse al repositorio.
 
 ## Ambientes reproducibles
 
@@ -124,55 +133,15 @@ python scripts/01_check_environment.py
 
 El script revisa importaciones base, disponibilidad de CUDA en PyTorch y existencia de carpetas esperadas.
 
-## Extracción básica de patches
+## Flujo legacy / histórico para imágenes pequeñas
 
-El script de extracción actual está pensado para imágenes pequeñas (`.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`). Todavía no procesa WSI reales ni pirámides gigapixel; esa integración se hará después con TIAToolbox/OpenSlide.
+El flujo inicial para extraer patches desde imágenes pequeñas fue archivado en:
 
-Ejemplo:
-
-```bash
-python scripts/03_extract_patches.py \
-  --image-path /ruta/imagen.tif \
-  --patch-size 256 \
-  --stride 256 \
-  --min-tissue-ratio 0.99 \
-  --output-dir outputs/patches/test_reconstructed \
-  --clear-output \
-  --save-rejected \
-  --preview-image \
-  --edge-policy overlap
+```text
+archive/legacy_small_image_pipeline/
 ```
 
-`--min-tissue-ratio` define la fracción mínima aproximada de tejido para aceptar un patch. Se calcula con un umbral simple contra fondo blanco, por lo que sirve como baseline computacional inicial y no como decisión clínica.
-
-`--edge-policy` controla qué ocurre cuando el tamaño de la imagen no calza exactamente con `patch_size` y `stride`:
-
-- `drop`: ignora bordes incompletos. Es el comportamiento histórico.
-- `overlap`: desplaza la última ventana para cubrir toda la imagen sin padding. Es la opción recomendada para experimentos iniciales cuando se quiere cobertura completa sin inventar píxeles.
-- `pad`: cubre toda la imagen rellenando bordes con fondo blanco `(255, 255, 255)`.
-
-Ejemplos:
-
-```bash
-# comportamiento actual
-python scripts/03_extract_patches.py ... --edge-policy drop
-
-# recomendado para cubrir toda la imagen sin padding
-python scripts/03_extract_patches.py ... --edge-policy overlap
-
-# útil cuando se quiere cubrir todo incluso con padding
-python scripts/03_extract_patches.py ... --edge-policy pad
-```
-
-`--clear-output` limpia la carpeta indicada por `--output-dir` antes de correr, con restricciones de seguridad para no borrar `/`, home, la raíz del repo ni carpetas peligrosas. Úsalo solo cuando quieras regenerar una corrida.
-
-La salida incluye:
-
-- `selected/`: patches aceptados;
-- `rejected/`: patches rechazados, solo si se usa `--save-rejected`;
-- `patches_metadata.csv`: todos los patches evaluados, incluyendo coordenadas, `tissue_ratio`, `selected`, `saved`, `split`, `edge_policy`, `padded` y dimensiones originales;
-- `summary.json`: resumen de la corrida, incluyendo cobertura de imagen y cantidad de patches con padding;
-- `patch_selection_preview.png`: grilla visual sobre la imagen original si se usa `--preview-image`.
+Ese flujo conserva `scripts/03_extract_patches.py`, `src/patching/`, `src/config/` y el notebook de exploración como referencia histórica. No forma parte del pipeline principal actual basado en WSI, selección inteligente de patches y segmentación técnica posterior. Si se quiere ejecutar desde `archive/`, puede requerir ajustes de imports y paths.
 
 ## Extracción reproducible desde WSI con OpenSlide
 

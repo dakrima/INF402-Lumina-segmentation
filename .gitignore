@@ -34,16 +34,34 @@ outputs/*
 !outputs/overlays/
 !outputs/metrics/
 !outputs/figures/
+!outputs/patch_selection/
+!outputs/final_patch_selection/
+!outputs/segmentation/
+!outputs/wsi_patches/
+!outputs/model_checks/
+!outputs/inference_smoke/
 outputs/patches/*
 outputs/masks/*
 outputs/overlays/*
 outputs/metrics/*
 outputs/figures/*
+outputs/patch_selection/*
+outputs/final_patch_selection/*
+outputs/segmentation/*
+outputs/wsi_patches/*
+outputs/model_checks/*
+outputs/inference_smoke/*
 !outputs/patches/.gitkeep
 !outputs/masks/.gitkeep
 !outputs/overlays/.gitkeep
 !outputs/metrics/.gitkeep
 !outputs/figures/.gitkeep
+!outputs/patch_selection/.gitkeep
+!outputs/final_patch_selection/.gitkeep
+!outputs/segmentation/.gitkeep
+!outputs/wsi_patches/.gitkeep
+!outputs/model_checks/.gitkeep
+!outputs/inference_smoke/.gitkeep
 
 # Large pathology image formats
 *.svs

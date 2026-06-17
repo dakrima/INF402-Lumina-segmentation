@@ -246,6 +246,32 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 Los outputs agregan trazabilidad de `nuclear_proxy`, región espacial, cuotas y `feature_diversity_bonus`. Las cuotas son suaves: evitan concentrar la selección en pocas zonas, pero no obligan a elegir patches de bajo score solo para llenar una región.
 
+## Etapa 2.2 - v3_server_quality
+
+`v3_server_quality` es un selector pensado para ejecución en servidor/iHealth. No usa deep learning ni el modelo de segmentación para seleccionar patches; mantiene la segmentación semántica como etapa posterior. A diferencia de los selectores CPU-friendly, puede scorear más candidatos y usar features de mayor resolución, manteniendo trazabilidad en `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json` y `method_config.json`.
+
+El selector usa proxies técnicos de utilidad esperada: calidad segmentable, señal nuclear HED/RGB, heterogeneidad, proxy prudente de baja celularidad compatible con lecho tratado, diversidad espacial y diversidad visual por features. Estos scores no son diagnóstico, no calculan RCB y no constituyen validación clínica.
+
+Ejemplo de smoke test acotado:
+
+```bash
+conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+  --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
+  --output-dir outputs/patch_selection/v3_server_quality_smoke \
+  --selector v3_server_quality \
+  --patch-size 1024 \
+  --stride 1024 \
+  --max-patches 4 \
+  --min-tissue-ratio 0.20 \
+  --seed 42 \
+  --max-candidates-to-score 50 \
+  --feature-size 256 \
+  --quota-grid 2x2 \
+  --overwrite
+```
+
+La salida sigue siendo compatible con `scripts/07_compare_patch_selectors.py`, `scripts/08_segment_selected_patches.py` y `scripts/09_compare_segmentation_on_selected_patches.py`.
+
 ## Etapa 3 - comparación de selectores
 
 La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:

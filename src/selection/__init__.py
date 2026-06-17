@@ -11,6 +11,11 @@ from src.selection.smart_tissue_nuclei import (
     SmartTissueNucleiConfig,
     run_smart_tissue_nuclei_selection,
 )
+from src.selection.v3_server_quality import (
+    V3_SERVER_QUALITY_SELECTOR_NAME,
+    V3ServerQualityConfig,
+    run_v3_server_quality_selection,
+)
 
 __all__ = [
     "BASELINE_SELECTOR_NAME",
@@ -18,6 +23,9 @@ __all__ = [
     "SMART_SELECTOR_NAME",
     "SMART_V2_LIGHT_SELECTOR_NAME",
     "SmartTissueNucleiConfig",
+    "V3_SERVER_QUALITY_SELECTOR_NAME",
+    "V3ServerQualityConfig",
     "run_baseline_selection",
     "run_smart_tissue_nuclei_selection",
+    "run_v3_server_quality_selection",
 ]

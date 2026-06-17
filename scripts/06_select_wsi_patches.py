@@ -14,10 +14,12 @@ if str(ROOT_DIR) not in sys.path:
 BASELINE_SELECTOR_NAME = "baseline_tiatoolbox"
 SMART_SELECTOR_NAME = "smart_tissue_nuclei_v1"
 SMART_V2_LIGHT_SELECTOR_NAME = "smart_tissue_nuclei_v2_light"
+V3_SERVER_QUALITY_SELECTOR_NAME = "v3_server_quality"
 SUPPORTED_SELECTORS = (
     BASELINE_SELECTOR_NAME,
     SMART_SELECTOR_NAME,
     SMART_V2_LIGHT_SELECTOR_NAME,
+    V3_SERVER_QUALITY_SELECTOR_NAME,
 )
 
 
@@ -41,17 +43,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-candidates-to-score",
         type=int,
-        default=300,
+        default=None,
         help=(
-            "For smart selectors. 0 scores all thumbnail-filtered "
-            "candidates; N > 0 scores at most N candidates after seeded shuffle."
+            "For smart/v3 selectors. 0 scores all thumbnail-filtered candidates; "
+            "N > 0 scores at most N candidates after seeded shuffle. Defaults to "
+            "300 for smart v1/v2 and 2000 for v3_server_quality."
         ),
     )
     parser.add_argument(
         "--feature-size",
         type=int,
-        default=256,
-        help="For smart selectors. Downsampled patch size used for features.",
+        default=None,
+        help=(
+            "For smart/v3 selectors. Downsampled patch size used for features. "
+            "Defaults to 256 for smart v1/v2 and 512 for v3_server_quality."
+        ),
     )
     parser.add_argument(
         "--lambda-spatial",
@@ -88,8 +94,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--quota-min-score-quantile",
         type=float,
-        default=0.25,
-        help="Minimum score_raw quantile used by soft quota selection.",
+        default=None,
+        help=(
+            "Minimum score_raw quantile used by soft quota selection. Defaults to "
+            "0.25 for smart v2_light and 0.20 for v3_server_quality."
+        ),
     )
     parser.add_argument(
         "--diversity-strategy",
@@ -100,8 +109,42 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--feature-diversity-weight",
         type=float,
+        default=None,
+        help=(
+            "Weight for farthest_feature diversity bonus. Defaults to 0.10 for "
+            "smart v2_light and 0.15 for v3_server_quality."
+        ),
+    )
+    parser.add_argument(
+        "--redundancy-penalty-weight",
+        type=float,
         default=0.10,
-        help="Weight for farthest_feature diversity bonus.",
+        help="For v3_server_quality. Feature-space redundancy penalty weight.",
+    )
+    parser.add_argument(
+        "--min-quality-score",
+        type=float,
+        default=0.15,
+        help="For v3_server_quality. Minimum technical quality score for preferred selection.",
+    )
+    parser.add_argument(
+        "--cache-features",
+        action="store_true",
+        help="For v3_server_quality. Write scored_candidates.csv feature cache.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "For v3_server_quality. Reuse a compatible scored_candidates.csv cache "
+            "when present; combine with --overwrite to rebuild outputs from cache."
+        ),
+    )
+    parser.add_argument(
+        "--output-mode",
+        choices=("debug", "minimal", "full"),
+        default="debug",
+        help="For v3_server_quality. Controls optional debug artifacts.",
     )
     parser.add_argument(
         "--overwrite",
@@ -125,8 +168,11 @@ def main() -> int:
             BaselineSelectionConfig,
             SMART_V2_LIGHT_SELECTOR_NAME as PACKAGE_SMART_V2_LIGHT_SELECTOR_NAME,
             SmartTissueNucleiConfig,
+            V3_SERVER_QUALITY_SELECTOR_NAME as PACKAGE_V3_SERVER_QUALITY_SELECTOR_NAME,
+            V3ServerQualityConfig,
             run_baseline_selection,
             run_smart_tissue_nuclei_selection,
+            run_v3_server_quality_selection,
         )
     except ModuleNotFoundError as exc:
         print(f"[FAIL] Missing Python dependency: {exc.name}")
@@ -148,7 +194,7 @@ def main() -> int:
             overwrite=args.overwrite,
         )
         runner = run_baseline_selection
-    else:
+    elif args.selector in (SMART_SELECTOR_NAME, SMART_V2_LIGHT_SELECTOR_NAME):
         is_v2_light = args.selector == SMART_V2_LIGHT_SELECTOR_NAME
         nuclear_proxy = args.nuclear_proxy or (
             "hed_deconvolution" if is_v2_light else "rgb_purple"
@@ -156,6 +202,22 @@ def main() -> int:
         spatial_strategy = args.spatial_strategy or ("quotas" if is_v2_light else "penalty")
         diversity_strategy = args.diversity_strategy or (
             "farthest_feature" if is_v2_light else "none"
+        )
+        max_candidates_to_score = (
+            args.max_candidates_to_score
+            if args.max_candidates_to_score is not None
+            else 300
+        )
+        feature_size = args.feature_size if args.feature_size is not None else 256
+        quota_min_score_quantile = (
+            args.quota_min_score_quantile
+            if args.quota_min_score_quantile is not None
+            else 0.25
+        )
+        feature_diversity_weight = (
+            args.feature_diversity_weight
+            if args.feature_diversity_weight is not None
+            else 0.10
         )
         if is_v2_light and PACKAGE_SMART_V2_LIGHT_SELECTOR_NAME != SMART_V2_LIGHT_SELECTOR_NAME:
             print("[FAIL] Internal selector constant mismatch for smart_tissue_nuclei_v2_light.")
@@ -172,18 +234,64 @@ def main() -> int:
             seed=args.seed,
             thumbnail_max_size=args.thumbnail_max_size,
             overwrite=args.overwrite,
-            max_candidates_to_score=args.max_candidates_to_score,
-            feature_size=args.feature_size,
+            max_candidates_to_score=max_candidates_to_score,
+            feature_size=feature_size,
             lambda_spatial=args.lambda_spatial,
             min_distance_level0=args.min_distance_level0,
             nuclear_proxy=nuclear_proxy,
             spatial_strategy=spatial_strategy,
             quota_grid=args.quota_grid,
-            quota_min_score_quantile=args.quota_min_score_quantile,
+            quota_min_score_quantile=quota_min_score_quantile,
             diversity_strategy=diversity_strategy,
-            feature_diversity_weight=args.feature_diversity_weight,
+            feature_diversity_weight=feature_diversity_weight,
         )
         runner = run_smart_tissue_nuclei_selection
+    else:
+        if PACKAGE_V3_SERVER_QUALITY_SELECTOR_NAME != V3_SERVER_QUALITY_SELECTOR_NAME:
+            print("[FAIL] Internal selector constant mismatch for v3_server_quality.")
+            return 1
+        max_candidates_to_score = (
+            args.max_candidates_to_score
+            if args.max_candidates_to_score is not None
+            else 2000
+        )
+        feature_size = args.feature_size if args.feature_size is not None else 512
+        quota_min_score_quantile = (
+            args.quota_min_score_quantile
+            if args.quota_min_score_quantile is not None
+            else 0.20
+        )
+        feature_diversity_weight = (
+            args.feature_diversity_weight
+            if args.feature_diversity_weight is not None
+            else 0.15
+        )
+        config = V3ServerQualityConfig(
+            wsi_path=args.wsi_path,
+            output_dir=args.output_dir,
+            root_dir=ROOT_DIR,
+            selector=args.selector,
+            patch_size=args.patch_size,
+            stride=args.stride,
+            max_patches=args.max_patches,
+            min_tissue_ratio=args.min_tissue_ratio,
+            seed=args.seed,
+            thumbnail_max_size=args.thumbnail_max_size,
+            overwrite=args.overwrite,
+            max_candidates_to_score=max_candidates_to_score,
+            feature_size=feature_size,
+            lambda_spatial=args.lambda_spatial,
+            min_distance_level0=args.min_distance_level0,
+            quota_grid=args.quota_grid,
+            quota_min_score_quantile=quota_min_score_quantile,
+            feature_diversity_weight=feature_diversity_weight,
+            redundancy_penalty_weight=args.redundancy_penalty_weight,
+            min_quality_score=args.min_quality_score,
+            resume=args.resume,
+            cache_features=args.cache_features,
+            output_mode=args.output_mode,
+        )
+        runner = run_v3_server_quality_selection
 
     print("WSI patch selection")
     print("===================")
@@ -194,15 +302,21 @@ def main() -> int:
     print(f"Max patches: {args.max_patches}")
     print(f"Minimum tissue ratio: {args.min_tissue_ratio}")
     print(f"Seed: {args.seed}")
-    if args.selector in (SMART_SELECTOR_NAME, SMART_V2_LIGHT_SELECTOR_NAME):
-        print(f"Max candidates to score: {args.max_candidates_to_score}")
-        print(f"Feature size: {args.feature_size}")
+    if args.selector in (SMART_SELECTOR_NAME, SMART_V2_LIGHT_SELECTOR_NAME, V3_SERVER_QUALITY_SELECTOR_NAME):
+        print(f"Max candidates to score: {config.max_candidates_to_score}")
+        print(f"Feature size: {config.feature_size}")
         print(f"Lambda spatial: {args.lambda_spatial}")
         print(f"Minimum distance level 0: {args.min_distance_level0 or args.patch_size}")
-        print(f"Nuclear proxy: {config.nuclear_proxy}")
-        print(f"Spatial strategy: {config.spatial_strategy}")
+        print(f"Nuclear proxy: {getattr(config, 'nuclear_proxy', 'hed_deconvolution')}")
+        print(f"Spatial strategy: {getattr(config, 'spatial_strategy', 'quotas')}")
         print(f"Quota grid: {config.quota_grid}")
-        print(f"Diversity strategy: {config.diversity_strategy}")
+        print(f"Diversity strategy: {getattr(config, 'diversity_strategy', 'farthest_feature')}")
+        if args.selector == V3_SERVER_QUALITY_SELECTOR_NAME:
+            print(f"Minimum quality score: {config.min_quality_score}")
+            print(f"Redundancy penalty weight: {config.redundancy_penalty_weight}")
+            print(f"Cache features: {config.cache_features}")
+            print(f"Resume: {config.resume}")
+            print(f"Output mode: {config.output_mode}")
     print("Clinical warning: technical selection only; not diagnosis, not RCB.")
 
     try:

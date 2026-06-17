@@ -317,14 +317,17 @@ Dice, IoU/mIoU y pixel accuracy.
 Tipo: core de selección de patches.
 
 Propósito: entrada CLI para ejecutar `baseline_tiatoolbox`,
-`smart_tissue_nuclei_v1` o `smart_tissue_nuclei_v2_light`.
+`smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light` o
+`v3_server_quality`.
 
 Módulos internos:
 
 - `src.selection.BaselineSelectionConfig`
 - `src.selection.SmartTissueNucleiConfig`
+- `src.selection.V3ServerQualityConfig`
 - `src.selection.run_baseline_selection`
 - `src.selection.run_smart_tissue_nuclei_selection`
+- `src.selection.run_v3_server_quality_selection`
 
 Inputs principales:
 
@@ -338,6 +341,8 @@ Inputs principales:
 - `--seed`
 - parámetros smart como `--max-candidates-to-score`, `--feature-size`,
   `--nuclear-proxy`, `--spatial-strategy`, `--diversity-strategy`
+- parámetros v3 como `--min-quality-score`, `--redundancy-penalty-weight`,
+  `--cache-features`, `--resume` y `--output-mode`
 
 Outputs:
 
@@ -886,6 +891,36 @@ Por qué se considera candidato final actual:
 - sigue siendo CPU-friendly;
 - no introduce dependencias de modelos deep learning para selección.
 
+### 6.4 `v3_server_quality`
+
+`v3_server_quality` es un selector orientado a ejecución en servidor/iHealth.
+Se implementa separado de `smart_tissue_nuclei.py` en
+`src/selection/v3_server_quality.py` para evitar que el selector CPU-friendly
+crezca demasiado.
+
+Qué hace:
+
+- usa el mismo pool thumbnail-filtered que los demás selectores;
+- puede scorear más candidatos por corrida;
+- usa `feature_size` mayor por defecto;
+- calcula proxies técnicos de calidad segmentable, celularidad HED/RGB,
+  heterogeneidad y utilidad esperada;
+- aplica cuotas espaciales suaves;
+- aplica diversidad por features;
+- agrega penalización de redundancia;
+- puede escribir `scored_candidates.csv` como cache/debug.
+
+Qué no hace:
+
+- no usa deep learning;
+- no usa `fcn_resnet50_unet-bcss` para seleccionar;
+- no detecta tumor con certeza clínica;
+- no calcula RCB;
+- no valida clínicamente los patches.
+
+Rol actual: selector server-quality no model-assisted. Sirve como paso
+intermedio antes de una futura versión `v4_model_assisted`.
+
 ## 7. Modelo de segmentación TIAToolbox
 
 El modelo usado es:
@@ -1027,6 +1062,7 @@ referencia histórica.
 | `baseline_tiatoolbox` | No | Ninguno | selección técnica por grilla, thumbnail y tejido | no segmenta, no usa DL, no diagnostica |
 | `smart_tissue_nuclei_v1` | No | Ninguno | selección técnica con features/proxies visuales | no usa segmentación, no detecta tumor |
 | `smart_tissue_nuclei_v2_light` | No | Ninguno | selección técnica con HED proxy, cuotas y diversidad | no usa DL, no valida clínicamente |
+| `v3_server_quality` | No | Ninguno | selección técnica server-quality con proxies de utilidad, diversidad y baja redundancia | no usa modelo de segmentación, no diagnostica |
 | TIAToolbox segmentation | Sí | `fcn_resnet50_unet-bcss` | segmentación semántica posterior sobre patches seleccionados | no selecciona patches, no produce ground truth clínico |
 | Evaluación BCSS futura | No implementado como flujo completo | Pendiente | comparar predicción vs ground truth cuando exista integración | no forma parte central de resultados actuales |
 

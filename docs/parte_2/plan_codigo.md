@@ -159,9 +159,9 @@ python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-Este baseline genera candidatos por grilla, filtra por máscara/proporción de tejido, aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` representa el pool común filtrado por thumbnail; `selected_metadata.csv` contiene solo los patches finalmente seleccionados.
+Este baseline usa TIAToolbox `SlidingWindowPatchExtractor` sobre la WSI, con `input_mask="otsu"` y `min_mask_ratio`. Aplica un orden reproducible con `seed`, guarda patches seleccionados y escribe `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png` cuando la preview se puede generar. `candidate_metadata.csv` representa el pool generado por TIAToolbox/Otsu; `selected_metadata.csv` contiene solo los patches finalmente seleccionados.
 
-Limitación: este baseline no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni comparación formal por sí solo. Es el punto de referencia para comparar selectores propios bajo el mismo pool de candidatos y presupuesto de patches.
+Limitación: este baseline no usa ranking inteligente, señal nuclear, HED, embeddings, diversidad espacial, HoVer-Net, CLAM ni comparación formal por sí solo. Es el punto de referencia externo para comparar selectores propios bajo el mismo presupuesto de patches; si el pool de candidatos difiere, la comparación debe reportarlo explícitamente.
 
 ### 3.3. Etapa 2 - smart_tissue_nuclei_v1
 

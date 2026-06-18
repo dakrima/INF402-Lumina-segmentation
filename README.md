@@ -39,14 +39,14 @@ Este proyecto no:
 ```text
 WSI / imagen histopatológica H&E
   -> tissue detection
-  -> baseline tipo TIAToolbox: grilla + máscara de tejido + min_mask_ratio
+  -> baseline TIAToolbox: ventana deslizante + máscara Otsu + min_mask_ratio
   -> selector propio de patches
   -> segmentación semántica posterior
   -> máscara/overlay revisable
   -> evaluación técnica y posible adaptación
 ```
 
-La estrategia inicial de INF402 es formalizar un baseline de extracción tipo TIAToolbox y compararlo luego contra un selector propio de patches. La segmentación con `fcn_resnet50_unet-bcss` se mantiene como etapa posterior para generar máscaras/overlays revisables. Fine-tuning queda como opción posterior si la segmentación no es suficiente; entrenar desde cero no es la primera opción.
+La estrategia inicial de INF402 es formalizar un baseline real basado en TIAToolbox y compararlo luego contra un selector propio de patches. La segmentación con `fcn_resnet50_unet-bcss` se mantiene como etapa posterior para generar máscaras/overlays revisables. Fine-tuning queda como opción posterior si la segmentación no es suficiente; entrenar desde cero no es la primera opción.
 
 ## Estructura del repositorio
 
@@ -192,9 +192,9 @@ python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png`. `candidate_metadata.csv` contiene el pool común de candidatos filtrados por thumbnail, mientras que `selected_metadata.csv` contiene solo los patches seleccionados.
+La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json`, `method_config.json` y `patch_selection_preview.png` cuando la preview se puede generar. `candidate_metadata.csv` contiene el pool de candidatos generado por `SlidingWindowPatchExtractor` con máscara Otsu y `min_mask_ratio`, mientras que `selected_metadata.csv` contiene solo los patches seleccionados.
 
-Limitación actual: este baseline tipo TIAToolbox no usa ranking inteligente, señal nuclear, diversidad espacial, HoVer-Net, CLAM ni active learning. La separación entre pool de candidatos y seleccionados permite una comparación justa contra `smart_tissue_nuclei_v1` y `smart_tissue_nuclei_v2_light` bajo el mismo presupuesto de patches.
+Este baseline no usa ranking inteligente, señal nuclear, HED, diversidad espacial, HoVer-Net, CLAM, active learning ni embeddings. La separación entre pool de candidatos y seleccionados mantiene trazabilidad experimental bajo el mismo presupuesto de patches, sin afirmar diagnóstico, RCB ni validación clínica.
 
 ## Etapa 2 - smart_tissue_nuclei_v1
 

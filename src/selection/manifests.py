@@ -15,6 +15,9 @@ CANDIDATE_METADATA_FIELDS = [
     "x_level0",
     "y_level0",
     "patch_size",
+    "stride",
+    "tiatoolbox_index",
+    "min_mask_ratio",
     "width",
     "height",
     "thumbnail_tissue_ratio",
@@ -110,6 +113,8 @@ CANDIDATE_METADATA_FIELDS = [
     "mpp_x",
     "mpp_y",
     "level_count",
+    "tissue_mask_method",
+    "clinical_warning",
 ]
 
 SELECTED_METADATA_FIELDS = [
@@ -120,6 +125,9 @@ SELECTED_METADATA_FIELDS = [
     "x_level0",
     "y_level0",
     "patch_size",
+    "stride",
+    "tiatoolbox_index",
+    "min_mask_ratio",
     "width",
     "height",
     "thumbnail_tissue_ratio",
@@ -209,6 +217,8 @@ SELECTED_METADATA_FIELDS = [
     "level_count",
     "selection_method",
     "seed",
+    "tissue_mask_method",
+    "clinical_warning",
 ]
 
 
@@ -227,7 +237,8 @@ def write_csv_manifest(
     with output_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        for row in rows:
+            writer.writerow({field_name: row.get(field_name, "") for field_name in fieldnames})
     return output_path
 
 

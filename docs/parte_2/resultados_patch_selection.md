@@ -24,18 +24,18 @@ WSI H&E
   -> segmentacion semantica posterior como validacion visual/tecnica
 ```
 
-La idea experimental clave es mantener el mismo pool de candidatos y el mismo presupuesto de patches por WSI. En la corrida de cierre, ambos metodos seleccionan `16` patches desde un pool comun de `1497` candidatos filtrados por thumbnail.
+La idea experimental clave es mantener trazabilidad de pool y el mismo presupuesto de patches por WSI. En corridas previas, ambos metodos seleccionaban `16` patches desde un pool comun de `1497` candidatos filtrados por thumbnail; con el baseline real TIAToolbox/Otsu, cualquier diferencia de pool debe quedar reportada explicitamente en la comparacion.
 
 ## 3. Baseline: baseline_tiatoolbox
 
-`baseline_tiatoolbox` es el punto de referencia. Genera una grilla sobre la WSI, filtra candidatos usando una mascara de tejido en thumbnail y selecciona patches de forma reproducible con `seed`.
+`baseline_tiatoolbox` es el punto de referencia. Usa TIAToolbox `SlidingWindowPatchExtractor` sobre la WSI con mascara automatica Otsu, `min_mask_ratio` y seleccion reproducible con `seed`.
 
 Sus propiedades principales son:
 
-- usa grilla, mascara de tejido y `min_tissue_ratio`;
-- mantiene `candidate_metadata.csv` como pool comun de candidatos;
+- usa ventana deslizante TIAToolbox, mascara Otsu y `min_tissue_ratio`;
+- mantiene `candidate_metadata.csv` como pool auditable de candidatos;
 - guarda solo los patches seleccionados en `selected/`;
-- no calcula ranking inteligente, senal nuclear, HED, cuotas espaciales ni diversidad por features.
+- no calcula ranking inteligente, senal nuclear, HED, embeddings, cuotas espaciales ni diversidad por features.
 
 En la corrida de cierre:
 

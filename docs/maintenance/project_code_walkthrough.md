@@ -793,19 +793,17 @@ Define `read_image()` para cargar imágenes comunes con PIL.
 
 ### 6.1 `baseline_tiatoolbox`
 
-`baseline_tiatoolbox` formaliza un baseline técnico tipo TIAToolbox para
-selección de patches desde WSI. Su objetivo es ser reproducible, simple y
+`baseline_tiatoolbox` formaliza un baseline técnico real basado en TIAToolbox
+para selección de patches desde WSI. Su objetivo es ser reproducible, simple y
 comparable contra los selectores propios.
 
 Qué hace:
 
-- genera una grilla determinística sobre la WSI;
-- crea un thumbnail;
-- estima una máscara técnica de tejido;
-- filtra candidatos por `thumbnail_tissue_ratio >= min_tissue_ratio`;
+- usa `SlidingWindowPatchExtractor` sobre la WSI;
+- usa `input_mask="otsu"` y `min_mask_ratio`;
+- registra el pool de candidatos generado por TIAToolbox;
 - baraja candidatos con `seed`;
-- lee patches reales uno por uno hasta seleccionar `max_patches`;
-- calcula `tissue_ratio` real solo para candidatos evaluados;
+- lee solo los patches seleccionados hasta `max_patches`;
 - guarda los patches seleccionados en `selected/`.
 
 Qué no hace:
@@ -818,28 +816,28 @@ Qué no hace:
 
 Metadata producida:
 
-- `candidate_metadata.csv`: pool común de candidatos filtrados por thumbnail.
-  Incluye candidatos evaluados y no evaluados.
+- `candidate_metadata.csv`: pool auditable de candidatos TIAToolbox/Otsu.
+  Incluye candidatos seleccionados y no seleccionados.
 - `selected_metadata.csv`: solo patches seleccionados.
 - `selection_summary.json`: contadores y resumen de corrida.
 - `method_config.json`: configuración experimental.
-- `patch_selection_preview.png`: preview técnico sobre thumbnail.
+- `patch_selection_preview.png`: preview técnico si el thumbnail se puede generar.
 
 Parámetros relevantes:
 
 - `patch_size`: tamaño del patch level 0.
 - `stride`: paso de la grilla.
 - `max_patches`: presupuesto de selección.
-- `min_tissue_ratio`: umbral técnico de tejido.
-- `thumbnail_max_size`: tamaño máximo del thumbnail.
+- `min_tissue_ratio`: umbral técnico de cobertura de máscara Otsu.
+- `thumbnail_max_size`: tamaño máximo de preview.
 - `seed`: reproducibilidad del shuffle.
 - `overwrite`: regeneración segura del output dir.
 
 ### 6.2 `smart_tissue_nuclei_v1`
 
-`smart_tissue_nuclei_v1` es el primer selector propio liviano. Usa el mismo pool
-de candidatos thumbnail-filtered que el baseline, pero asigna score a una
-muestra de candidatos antes de seleccionar.
+`smart_tissue_nuclei_v1` es el primer selector propio liviano. Usa el pool
+thumbnail-filtered manual del flujo propio y asigna score a una muestra de
+candidatos antes de seleccionar.
 
 Qué hace:
 

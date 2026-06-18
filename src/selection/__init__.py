@@ -1,10 +1,18 @@
 """Patch selection architecture for INF402 Lumina/Histora."""
 
+# Primary paper selectors.
 from src.selection.tiatoolbox_baseline import (
     BASELINE_SELECTOR_NAME,
     BaselineSelectionConfig,
     run_baseline_selection,
 )
+from src.selection.v4_1_medical_embedding_assisted import (
+    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+    V41MedicalEmbeddingAssistedConfig,
+    run_v4_1_medical_embedding_assisted_selection,
+)
+
+# Legacy / experimental selectors kept for traceability and reproducibility.
 from src.selection.smart_tissue_nuclei import (
     SMART_SELECTOR_NAME,
     SMART_V2_LIGHT_SELECTOR_NAME,
@@ -21,15 +29,16 @@ from src.selection.v4_embedding_assisted import (
     V4EmbeddingAssistedConfig,
     run_v4_embedding_assisted_selection,
 )
-from src.selection.v4_1_medical_embedding_assisted import (
-    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
-    V41MedicalEmbeddingAssistedConfig,
-    run_v4_1_medical_embedding_assisted_selection,
-)
 
 __all__ = [
+    # Primary paper selectors.
     "BASELINE_SELECTOR_NAME",
     "BaselineSelectionConfig",
+    "V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME",
+    "V41MedicalEmbeddingAssistedConfig",
+    "run_baseline_selection",
+    "run_v4_1_medical_embedding_assisted_selection",
+    # Legacy / experimental selectors.
     "SMART_SELECTOR_NAME",
     "SMART_V2_LIGHT_SELECTOR_NAME",
     "SmartTissueNucleiConfig",
@@ -37,11 +46,7 @@ __all__ = [
     "V3ServerQualityConfig",
     "V4_EMBEDDING_ASSISTED_SELECTOR_NAME",
     "V4EmbeddingAssistedConfig",
-    "V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME",
-    "V41MedicalEmbeddingAssistedConfig",
-    "run_baseline_selection",
     "run_smart_tissue_nuclei_selection",
     "run_v3_server_quality_selection",
     "run_v4_embedding_assisted_selection",
-    "run_v4_1_medical_embedding_assisted_selection",
 ]

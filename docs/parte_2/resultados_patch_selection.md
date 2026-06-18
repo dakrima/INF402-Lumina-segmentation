@@ -4,7 +4,7 @@
 
 El objetivo de esta etapa es construir y evaluar una estrategia tecnica de seleccion inteligente de patches para imagenes histopatologicas H&E. Lumina/Histora se mantiene como una herramienta de apoyo para analisis histopatologico; en INF402, la contribucion tecnica principal se concentra en seleccionar patches informativos, diversos y trazables para alimentar una segmentacion semantica posterior.
 
-El selector candidato final congelado por ahora es `smart_tissue_nuclei_v2_light`. El baseline comparativo es `baseline_tiatoolbox` y `smart_tissue_nuclei_v1` se conserva como version intermedia/ablation.
+El flujo principal actual del paper compara `baseline_tiatoolbox` contra `v4_1_medical_embedding_assisted`. `smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light`, `v3_server_quality` y `v4_embedding_assisted` se conservan como iteraciones previas, ablations o soporte interno para trazabilidad/reproducibilidad.
 
 Este trabajo no diagnostica, no calcula RCB, no cuantifica cancer residual como objetivo principal, no reemplaza al patologo y no constituye validacion clinica.
 
@@ -14,17 +14,15 @@ El flujo implementado es:
 
 ```text
 WSI H&E
-  -> thumbnail liviano
-  -> mascara de tejido
-  -> candidate pool comun thumbnail-filtered
-  -> baseline_tiatoolbox o smart_tissue_nuclei_v2_light
+  -> candidate pool tecnico
+  -> baseline_tiatoolbox o v4_1_medical_embedding_assisted
   -> selected patches
   -> metadata CSV/JSON y previews
-  -> comparacion tecnica baseline vs selector propio
+  -> comparacion tecnica baseline vs selector propuesto
   -> segmentacion semantica posterior como validacion visual/tecnica
 ```
 
-La idea experimental clave es mantener trazabilidad de pool y el mismo presupuesto de patches por WSI. En corridas previas, ambos metodos seleccionaban `16` patches desde un pool comun de `1497` candidatos filtrados por thumbnail; con el baseline real TIAToolbox/Otsu, cualquier diferencia de pool debe quedar reportada explicitamente en la comparacion.
+La idea experimental clave es mantener trazabilidad de pool y el mismo presupuesto de patches por WSI. Los metodos no comparten necesariamente el mismo pool inicial: el baseline usa TIAToolbox/Otsu, mientras que v4.1 usa su propia generacion de candidatos y ranking tecnico. Esta diferencia debe reportarse explicitamente en la comparacion.
 
 ## 3. Baseline: baseline_tiatoolbox
 
@@ -41,35 +39,31 @@ En la corrida de cierre:
 
 ```text
 selector: baseline_tiatoolbox
-candidate rows: 1497
+candidate rows: 1427
 selected patches: 16
-runtime_seconds: 2.571
+tissue_mask_method: tiatoolbox_otsu
 ```
 
-## 4. Selector propio final: smart_tissue_nuclei_v2_light
+## 4. Selector propuesto: v4_1_medical_embedding_assisted
 
-`smart_tissue_nuclei_v2_light` es el selector propio candidato final de esta etapa. Mantiene el mismo pool comun de candidatos, pero scorea una muestra controlada de candidatos y prioriza patches por calidad tecnica, contenido de tejido, proxy nuclear/hematoxilina, bajo ruido y diversidad.
+`v4_1_medical_embedding_assisted` es el selector tecnico propuesto para la comparacion principal. Puede reutilizar funciones internas de `v3_server_quality` como scoring/base tecnica, agrega proxies clasicos de procesamiento de imagen medica y usa UNI como reranker morfologico dentro de candidatos tecnicamente fuertes. Esto no implica que `v3_server_quality` se ejecute como metodo principal.
 
-Incorpora tres extensiones sobre v1:
+Incorpora:
 
-- HED color deconvolution como proxy de senal hematoxilina/nuclear;
-- spatial quotas suaves para evitar concentrar todos los patches en una sola region;
-- feature diversity simple para favorecer patches con caracteristicas distintas.
+- proxies tecnicos de calidad de tincion/intensidad, tejido, textura, nitidez, artefactos y pseudo-celularidad;
+- score base reutilizado desde helpers de `v3_server_quality`;
+- embeddings UNI como reranking morfologico, no como clasificador clinico;
+- seleccion de patches tecnicamente utiles para segmentacion posterior.
 
 En la corrida de cierre:
 
 ```text
-selector: smart_tissue_nuclei_v2_light
-nuclear_proxy: hed_deconvolution
-spatial_strategy: quotas
-diversity_strategy: farthest_feature
+selector: v4_1_medical_embedding_assisted
 candidate rows: 1497
-candidates scored: 500
 selected patches: 16
-regions_covered: 12
-active_regions: 13
-quota_fill_rate: 0.9231
-runtime_seconds: 22.185
+segmentation_model_used_for_selection: false
+embedding_backend: uni
+embedding_model_name: UNI
 ```
 
 ## 5. Explicacion de conceptos clave
@@ -100,13 +94,13 @@ runtime_seconds: 22.185
 
 **Feature diversity**: bonificacion para seleccionar patches distintos entre si en el espacio de features, reduciendo redundancia.
 
-**Candidate pool**: conjunto comun de candidatos que paso el filtro thumbnail. Baseline y selector propio compiten sobre ese mismo pool.
+**Candidate pool**: conjunto de candidatos que pasa el filtro inicial de cada metodo. En el flujo principal actual, baseline y v4.1 no comparten necesariamente el mismo pool: baseline usa TIAToolbox/Otsu y v4.1 usa su generacion propia con ranking tecnico.
 
 ## 6. Features utilizadas por el selector
 
 `tissue_ratio`: mide que proporcion del patch parece contener tejido y no fondo blanco.
 
-`nuclear_signal`: estima senal asociada a hematoxilina/nucleos. En `smart_tissue_nuclei_v2_light` se usa `hed_deconvolution`. Esto es un proxy heuristico basado en tincion, no segmentacion nuclear.
+`nuclear_signal` y proxies de pseudo-celularidad: estiman senal asociada a hematoxilina/nucleos. En iteraciones previas se uso `hed_deconvolution`; en v4.1 se integran proxies clasicos de imagen medica y pseudo-celularidad. Son heuristicas basadas en tincion, no segmentacion nuclear ni diagnostico.
 
 `visual_entropy`: mide variabilidad visual. Valores mayores suelen indicar mayor riqueza de intensidades.
 
@@ -120,29 +114,29 @@ runtime_seconds: 22.185
 
 ## 7. Estrategia de seleccion
 
-`smart_tissue_nuclei_v2_light` opera asi:
+`v4_1_medical_embedding_assisted` opera asi:
 
 1. Carga una WSI con OpenSlide.
 2. Genera un thumbnail liviano.
 3. Construye una mascara de tejido.
-4. Genera un pool comun de candidatos.
+4. Genera su pool propio de candidatos.
 5. Scorea una cantidad controlada de candidatos.
-6. Calcula features de tejido, nucleo/tincion, entropia, nitidez y artefactos.
+6. Calcula proxies tecnicos de calidad, tejido, tincion/textura, nitidez, artefactos y pseudo-celularidad.
 7. Normaliza features.
-8. Calcula `score_raw`.
-9. Aplica cuotas espaciales suaves y diversidad por features.
+8. Calcula `score_v3_base`, scores medicos tecnicos y reranking morfologico con UNI.
+9. Aplica seleccion controlada por utilidad tecnica y diversidad.
 10. Selecciona `16` patches.
 11. Guarda metadata, imagenes seleccionadas y previews.
 12. Compara contra baseline usando metricas tecnicas.
 
-La formula de score no se cambio en el cierre; esta etapa congela el selector candidato final y ordena resultados/documentacion.
+La formula de score no implica diagnostico, RCB ni validacion clinica; solo ordena candidatos por utilidad tecnica esperada.
 
 ## 8. Outputs generados
 
 Cada selector genera:
 
 - `selected/`: patches PNG seleccionados;
-- `candidate_metadata.csv`: pool comun de candidatos thumbnail-filtered;
+- `candidate_metadata.csv`: pool auditable de candidatos del metodo;
 - `selected_metadata.csv`: solo patches seleccionados;
 - `selection_summary.json`: resumen de corrida;
 - `method_config.json`: configuracion del metodo;
@@ -163,30 +157,22 @@ El snapshot limpio queda en:
 ```text
 outputs/final_patch_selection/
   baseline_tiatoolbox/
-  smart_tissue_nuclei_v2_light/
-  comparison_baseline_vs_smart_v2_light/
+  v4_1_medical_embedding_assisted/
+  comparison_baseline_vs_v4_1_medical_embedding_assisted/
 ```
 
-## 9. Comparacion final baseline vs smart_v2_light
+## 9. Comparacion principal baseline vs v4.1
 
-Resultados principales de la corrida `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:
+Resultados principales de auditoria de outputs existentes `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`:
 
-| Metrica | Baseline | smart_v2_light | Lectura tecnica |
+| Metrica | Baseline | v4.1 | Lectura tecnica |
 | --- | ---: | ---: | --- |
 | selected patches | 16 | 16 | Mismo presupuesto. |
-| tissue_ratio promedio | 0.8445 | 0.8924 | v2 selecciona patches con mas tejido promedio. |
-| nuclear_signal_rgb promedio | 0.0917 | 0.0946 | Diferencia leve en proxy RGB legacy. |
-| nuclear_signal_hed promedio | 0.2715 | 0.4507 | v2 prioriza mayor senal HED/hematoxilina. |
-| visual_entropy promedio | 0.8171 | 0.8613 | v2 aumenta variabilidad visual promedio. |
-| blur_score promedio | 0.0111 | 0.0177 | v2 prioriza patches con mayor nitidez estimada. |
-| artifact_penalty promedio | 0.0501 | 0.0330 | v2 reduce penalizacion por artefactos. |
-| overlap | 0 | 0 | Selecciona un conjunto distinto al baseline. |
-| jaccard | 0.0000 | 0.0000 | No hubo coincidencia entre seleccionados. |
-| mean_pairwise_distance | 24790.42 | 26443.62 | v2 mejora distancia media entre pares. |
-| spatial_coverage_approx | 0.5061 | 0.4930 | v2 queda levemente menor en cobertura bbox aproximada. |
-| runtime_seconds | 2.571 | 22.185 | v2 es mas costoso por scoring de features. |
-| regions_covered | 0/no aplica | 12 | v2 cubre 12 de 13 regiones activas. |
-| quota_fill_rate | no aplica | 0.9231 | Cuotas suaves cubren la mayoria de regiones activas. |
+| candidate rows | 1427 | 1497 | Los pools son distintos por diseno experimental. |
+| pool inicial | TIAToolbox/Otsu | pool propio/manual + ranking tecnico | La diferencia debe reportarse, no ocultarse. |
+| selected coordinate overlap | 1 | 1 | Hay una coordenada seleccionada compartida. |
+| segmentation_model_used_for_selection | no aplica | false | v4.1 no usa segmentacion para seleccionar. |
+| embedding_backend | no aplica | uni | UNI se usa como reranking morfologico, no diagnostico. |
 
 La comparacion es tecnica. Una mejora en estas metricas no implica diagnostico, superioridad clinica ni desempeño de segmentacion garantizado. Dice/IoU deberian evaluarse aparte cuando exista ground truth compatible.
 
@@ -200,16 +186,16 @@ La comparacion es tecnica. Una mejora en estas metricas no implica diagnostico, 
 - La comparacion actual depende de los casos evaluados.
 - La generalizacion requiere mas WSIs y/o evaluacion con ground truth.
 - Las metricas Dice, IoU o pixel accuracy corresponden a segmentacion posterior, no a la seleccion de patches por si sola.
-- `smart_tissue_nuclei_v2_light` tiene mayor costo computacional que el baseline.
+- v4.1 tiene mayor costo computacional esperado que el baseline por scoring tecnico y embeddings.
 
 ## 11. Como reproducir resultados
 
 Baseline:
 
 ```bash
-conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+/Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python scripts/06_select_wsi_patches.py \
   --wsi-path "/Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs" \
-  --output-dir "outputs/patch_selection/baseline_tcga_a2_a3xs" \
+  --output-dir "outputs/patch_selection/baseline_tiatoolbox_tcga_a2_a3xs" \
   --selector baseline_tiatoolbox \
   --patch-size 1024 \
   --stride 1024 \
@@ -219,27 +205,25 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
   --overwrite
 ```
 
-Selector candidato final:
+Selector propuesto v4.1:
 
 ```bash
-conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+KMP_DUPLICATE_LIB_OK=TRUE /Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python scripts/06_select_wsi_patches.py \
   --wsi-path "/Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs" \
-  --output-dir "outputs/patch_selection/smart_v2_light_tcga_a2_a3xs" \
-  --selector smart_tissue_nuclei_v2_light \
+  --output-dir "outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs" \
+  --selector v4_1_medical_embedding_assisted \
   --patch-size 1024 \
   --stride 1024 \
   --max-patches 16 \
   --min-tissue-ratio 0.20 \
   --seed 42 \
-  --max-candidates-to-score 500 \
-  --feature-size 256 \
-  --lambda-spatial 0.15 \
-  --nuclear-proxy hed_deconvolution \
-  --spatial-strategy quotas \
-  --quota-grid 4x4 \
-  --quota-min-score-quantile 0.25 \
-  --diversity-strategy farthest_feature \
-  --feature-diversity-weight 0.10 \
+  --max-candidates-to-score 1000 \
+  --feature-size 512 \
+  --embedding-model-path /Users/davidkripper/models/uni/pytorch_model.bin \
+  --embedding-device cpu \
+  --embedding-batch-size 16 \
+  --reuse-embedding-cache \
+  --cache-embeddings \
   --overwrite
 ```
 
@@ -247,9 +231,9 @@ Comparacion final:
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
-  --baseline-dir "outputs/patch_selection/baseline_tcga_a2_a3xs" \
-  --smart-dir "outputs/patch_selection/smart_v2_light_tcga_a2_a3xs" \
-  --output-dir "outputs/patch_selection/comparison_baseline_vs_smart_v2_light_tcga_a2_a3xs" \
+  --baseline-dir "outputs/patch_selection/baseline_tiatoolbox_tcga_a2_a3xs" \
+  --smart-dir "outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs" \
+  --output-dir "outputs/patch_selection/comparison_baseline_vs_v4_1_medical_embedding_assisted" \
   --feature-size 256 \
   --overwrite
 ```

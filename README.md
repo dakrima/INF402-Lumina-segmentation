@@ -20,7 +20,7 @@ El foco del repositorio es:
 - evaluación con métricas de segmentación cuando exista ground truth;
 - posible fine-tuning si el baseline preentrenado no basta.
 
-Estado de cierre para selección de patches: `baseline_tiatoolbox` queda como baseline comparativo, `smart_tissue_nuclei_v1` como versión intermedia/ablation y `smart_tissue_nuclei_v2_light` como selector propio candidato final del proyecto por ahora.
+Estado actual para selección de patches: el flujo principal del paper compara `baseline_tiatoolbox` contra `v4_1_medical_embedding_assisted`. `smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light`, `v3_server_quality` y `v4_embedding_assisted` se conservan como iteraciones previas, ablations o soporte interno para reproducibilidad.
 
 ## Lo que este proyecto no hace
 
@@ -47,6 +47,24 @@ WSI / imagen histopatológica H&E
 ```
 
 La estrategia inicial de INF402 es formalizar un baseline real basado en TIAToolbox y compararlo luego contra un selector propio de patches. La segmentación con `fcn_resnet50_unet-bcss` se mantiene como etapa posterior para generar máscaras/overlays revisables. Fine-tuning queda como opción posterior si la segmentación no es suficiente; entrenar desde cero no es la primera opción.
+
+## Flujo principal de selección de patches
+
+Para el flujo principal del paper se consideran dos métodos:
+
+1. `baseline_tiatoolbox`
+   - Baseline real basado en TIAToolbox.
+   - Usa `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`.
+   - No usa segmentación, UNI, embeddings ni features médicas para seleccionar.
+
+2. `v4_1_medical_embedding_assisted`
+   - Selector técnico propuesto.
+   - Usa proxies técnicos de imagen médica y embeddings UNI como reranking morfológico.
+   - No usa segmentación para seleccionar, no calcula RCB y no emite diagnóstico.
+
+`smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light`, `v3_server_quality` y `v4_embedding_assisted` siguen disponibles como métodos legacy/experimentales para trazabilidad y reproducibilidad. `v4_1_medical_embedding_assisted` puede reutilizar funciones internas de `v3_server_quality` para scoring/base técnica; esto no implica que `v3_server_quality` se ejecute como método principal.
+
+Los métodos no comparten necesariamente el mismo pool inicial de candidatos. El baseline utiliza el pool generado por TIAToolbox con máscara Otsu, mientras que v4.1 utiliza su propia generación de candidatos y posterior ranking técnico. Esta diferencia debe reportarse como parte de la configuración experimental.
 
 ## Estructura del repositorio
 
@@ -180,9 +198,9 @@ KMP_DUPLICATE_LIB_OK=TRUE python scripts/04_run_inference.py \
 El selector formal de Etapa 1 vive en `scripts/06_select_wsi_patches.py` y genera una corrida reproducible de selección baseline sobre WSI:
 
 ```bash
-python scripts/06_select_wsi_patches.py \
+/Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python scripts/06_select_wsi_patches.py \
   --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
-  --output-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/baseline_tiatoolbox_tcga_a2_a3xs \
   --selector baseline_tiatoolbox \
   --patch-size 1024 \
   --stride 1024 \
@@ -196,9 +214,9 @@ La salida incluye `selected/`, `candidate_metadata.csv`, `selected_metadata.csv`
 
 Este baseline no usa ranking inteligente, señal nuclear, HED, diversidad espacial, HoVer-Net, CLAM, active learning ni embeddings. La separación entre pool de candidatos y seleccionados mantiene trazabilidad experimental bajo el mismo presupuesto de patches, sin afirmar diagnóstico, RCB ni validación clínica.
 
-## Etapa 2 - smart_tissue_nuclei_v1
+## Legacy / experimental - smart_tissue_nuclei_v1
 
-El selector propio `smart_tissue_nuclei_v1` usa el mismo pool común de candidatos filtrados por thumbnail y scorea una muestra reproducible de candidatos con features simples: `tissue_ratio`, `nuclear_signal`, `visual_entropy`, `blur_score`, `artifact_penalty` y penalización espacial greedy.
+`smart_tissue_nuclei_v1` es una iteración previa/ablation. Usa un pool de candidatos filtrados por thumbnail y scorea una muestra reproducible de candidatos con features simples: `tissue_ratio`, `nuclear_signal`, `visual_entropy`, `blur_score`, `artifact_penalty` y penalización espacial greedy.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
@@ -218,9 +236,9 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 `--max-candidates-to-score` y `--feature-size` mantienen el flujo CPU-friendly: los patches se leen uno por uno, las features se calculan sobre una versión reducida y solo se guardan los seleccionados. Esta etapa no ejecuta segmentación, fine-tuning ni modelos deep learning. `smart_tissue_nuclei_v1` se conserva como versión intermedia/ablation para contrastar contra el baseline y contra v2_light.
 
-## Etapa 2.1 - smart_tissue_nuclei_v2_light
+## Legacy / experimental - smart_tissue_nuclei_v2_light
 
-`smart_tissue_nuclei_v2_light` mejora el selector propio con tres mecanismos livianos: proxy nuclear por HED color deconvolution, cuotas espaciales suaves por región y diversidad simple por features. Mantiene el mismo pool thumbnail-filtered, no usa modelos deep learning y queda congelado por ahora como selector propio candidato final.
+`smart_tissue_nuclei_v2_light` es una iteración previa del selector propio. Mejora v1 con proxy nuclear por HED color deconvolution, cuotas espaciales suaves por región y diversidad simple por features. Se conserva para trazabilidad/reproducibilidad, pero no es el método principal actual del paper.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
@@ -246,9 +264,9 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 Los outputs agregan trazabilidad de `nuclear_proxy`, región espacial, cuotas y `feature_diversity_bonus`. Las cuotas son suaves: evitan concentrar la selección en pocas zonas, pero no obligan a elegir patches de bajo score solo para llenar una región.
 
-## Etapa 2.2 - v3_server_quality
+## Legacy / soporte interno - v3_server_quality
 
-`v3_server_quality` es un selector pensado para ejecución en servidor/iHealth. No usa deep learning ni el modelo de segmentación para seleccionar patches; mantiene la segmentación semántica como etapa posterior. A diferencia de los selectores CPU-friendly, puede scorear más candidatos y usar features de mayor resolución, manteniendo trazabilidad en `candidate_metadata.csv`, `selected_metadata.csv`, `selection_summary.json` y `method_config.json`.
+`v3_server_quality` es un selector pensado para ejecución en servidor/iHealth y se conserva como soporte interno/base técnica para v4.1. No usa deep learning ni el modelo de segmentación para seleccionar patches; mantiene la segmentación semántica como etapa posterior.
 
 El selector usa proxies técnicos de utilidad esperada: calidad segmentable, señal nuclear HED/RGB, heterogeneidad, proxy prudente de baja celularidad compatible con lecho tratado, diversidad espacial y diversidad visual por features. Estos scores no son diagnóstico, no calculan RCB y no constituyen validación clínica.
 
@@ -272,7 +290,7 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 La salida sigue siendo compatible con `scripts/07_compare_patch_selectors.py`, `scripts/08_segment_selected_patches.py` y `scripts/09_compare_segmentation_on_selected_patches.py`.
 
-## Etapa 2.3 - v4_embedding_assisted
+## Legacy / experimental - v4_embedding_assisted
 
 `v4_embedding_assisted` extiende `v3_server_quality` con embeddings UNI como representación morfológica. Los embeddings se usan para favorecer diversidad visual, balance de clusters y reducción de redundancia entre patches. UNI no se usa como clasificador clínico, no entrega ground truth y no reemplaza la segmentación posterior.
 
@@ -308,18 +326,18 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 Las salidas mantienen compatibilidad con las etapas posteriores y agregan `embedding_cache.npz`, `embedding_cache_metadata.json` y `embedding_cluster_summary.csv` cuando se calculan embeddings.
 
-## Etapa 2.4 - v4_1_medical_embedding_assisted
+## Método principal propuesto - v4_1_medical_embedding_assisted
 
-`v4_1_medical_embedding_assisted` es una variante conservadora de `v4_embedding_assisted`. Mantiene `v3_server_quality` como base dominante, agrega proxies clasicos de procesamiento de imagen medica y usa UNI solo como reranker morfologico dentro de candidatos tecnicamente fuertes.
+`v4_1_medical_embedding_assisted` es el selector técnico propuesto para la comparación principal del paper. Mantiene helpers/scoring base de `v3_server_quality`, agrega proxies clasicos de procesamiento de imagen medica y usa UNI solo como reranker morfologico dentro de candidatos tecnicamente fuertes.
 
 Las features nuevas describen calidad tecnica de tincion/intensidad, mascara de tejido, textura, nitidez, artefactos y pseudo-celularidad basada en hematoxilina. Son proxies reproducibles para seleccion de patches; no son diagnostico, no segmentan nucleos reales, no calculan RCB y no constituyen validacion clinica.
 
 La estrategia por defecto filtra candidatos por `score_v3_base`, calidad/utilidad medica y penalizacion de artefactos antes de usar embeddings UNI para diversidad morfologica controlada. La seleccion no usa `fcn_resnet50_unet-bcss` ni ejecuta segmentacion preliminar.
 
-Ejemplo de comando con cache UNI compatible:
+Ejemplo de comando con UNI local/cache compatible:
 
 ```bash
-conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
+KMP_DUPLICATE_LIB_OK=TRUE /Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python scripts/06_select_wsi_patches.py \
   --wsi-path /Users/davidkripper/demoCasesMvpFeria/TCGA-A2-A3XS-01Z-00-DX1.867925C0-91D8-40A0-9FEA-25A635AC31E7.svs \
   --output-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
   --selector v4_1_medical_embedding_assisted \
@@ -333,9 +351,8 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
   --quota-grid 4x4 \
   --embedding-backend uni \
   --embedding-model-path /Users/davidkripper/models/uni/pytorch_model.bin \
-  --embedding-cache-path outputs/patch_selection/v4_embedding_assisted_tcga_a2_a3xs/embedding_cache.npz \
-  --embedding-device auto \
-  --embedding-batch-size 2 \
+  --embedding-device cpu \
+  --embedding-batch-size 16 \
   --cache-embeddings \
   --reuse-embedding-cache \
   --medical-min-quality-score 0.50 \
@@ -349,13 +366,13 @@ conda run -n inf402-lumina-seg python scripts/06_select_wsi_patches.py \
 
 ## Etapa 3 - comparación de selectores
 
-La comparación formal toma dos carpetas ya generadas, valida que compartan configuración experimental y recalcula features solo sobre los PNG seleccionados. La comparación principal de cierre es `baseline_tiatoolbox` vs `smart_tissue_nuclei_v2_light`:
+La comparación formal toma dos carpetas ya generadas y recalcula features solo sobre los PNG seleccionados. La comparación principal actual es `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`. Los pools iniciales pueden diferir: el baseline usa TIAToolbox/Otsu y v4.1 usa su generación propia con ranking técnico.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \
-  --baseline-dir outputs/patch_selection/baseline_tcga_a2_a3xs \
-  --smart-dir outputs/patch_selection/smart_v2_light_tcga_a2_a3xs \
-  --output-dir outputs/patch_selection/comparison_baseline_vs_smart_v2_light_tcga_a2_a3xs \
+  --baseline-dir outputs/patch_selection/baseline_tiatoolbox_tcga_a2_a3xs \
+  --smart-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --output-dir outputs/patch_selection/comparison_baseline_vs_v4_1_medical_embedding_assisted \
   --feature-size 256 \
   --overwrite
 ```
@@ -379,15 +396,15 @@ python scripts/08_segment_selected_patches.py \
 
 La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. La máscara cruda del modelo puede tener menor resolución que el patch original; para el overlay se reescala con vecino más cercano para preservar etiquetas discretas de clase. Por eso, `class_pixel_counts` corresponde a la resolución cruda de predicción, no necesariamente al tamaño visual del overlay. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
 
-## Etapa 5.5 - comparación de segmentación baseline vs smart_v2
+## Etapa 5.5 - comparación de segmentación baseline vs v4.1
 
 Una vez segmentados los patches seleccionados por cada método, se puede comparar técnicamente la distribución de clases predichas, warnings, tamaños de máscara y métricas operativas sin volver a ejecutar selección ni inferencia:
 
 ```bash
 python scripts/09_compare_segmentation_on_selected_patches.py \
   --baseline-seg-dir outputs/segmentation/baseline_tiatoolbox \
-  --smart-seg-dir outputs/segmentation/smart_tissue_nuclei_v2_light \
-  --output-dir outputs/segmentation/comparison_baseline_vs_smart_v2_light \
+  --smart-seg-dir outputs/segmentation/v4_1_medical_embedding_assisted \
+  --output-dir outputs/segmentation/comparison_baseline_vs_v4_1_medical_embedding_assisted \
   --overwrite
 ```
 
@@ -491,5 +508,5 @@ Usar `data/` y `outputs/` solo como estructura local de trabajo.
 1. Evaluar la comparación en más WSIs.
 2. Incorporar ground truth BCSS cuando esté disponible para medir cobertura por clase.
 3. Ejecutar segmentación semántica posterior sobre patches seleccionados para generar máscaras/overlays revisables.
-4. Mantener `smart_tissue_nuclei_v2_light` como selector candidato final mientras no exista evidencia experimental para cambiar pesos o features.
+4. Mantener `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted` como flujo principal del paper; conservar v1/v2/v3/v4 como legacy/soporte.
 5. Considerar fine-tuning solo si la segmentación posterior no basta.

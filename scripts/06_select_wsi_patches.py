@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Select WSI patches using INF402 baseline or smart selectors."""
+"""Select WSI patches using INF402 primary or legacy technical selectors."""
 
 from __future__ import annotations
 
@@ -17,14 +17,17 @@ SMART_V2_LIGHT_SELECTOR_NAME = "smart_tissue_nuclei_v2_light"
 V3_SERVER_QUALITY_SELECTOR_NAME = "v3_server_quality"
 V4_EMBEDDING_ASSISTED_SELECTOR_NAME = "v4_embedding_assisted"
 V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME = "v4_1_medical_embedding_assisted"
-SUPPORTED_SELECTORS = (
+PRIMARY_SELECTORS = (
     BASELINE_SELECTOR_NAME,
+    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
+)
+LEGACY_SELECTORS = (
     SMART_SELECTOR_NAME,
     SMART_V2_LIGHT_SELECTOR_NAME,
     V3_SERVER_QUALITY_SELECTOR_NAME,
     V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
-    V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
 )
+SUPPORTED_SELECTORS = PRIMARY_SELECTORS + LEGACY_SELECTORS
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,12 +35,23 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Run WSI patch selection for INF402. This performs technical patch "
             "selection only; it does not diagnose, calculate RCB, train models, "
-            "or run semantic segmentation."
+            "or run semantic segmentation. Main paper flow: baseline_tiatoolbox "
+            "vs v4_1_medical_embedding_assisted. Other selectors remain available "
+            "as legacy/experimental runs for traceability."
         ),
     )
     parser.add_argument("--wsi-path", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--selector", default=BASELINE_SELECTOR_NAME)
+    parser.add_argument(
+        "--selector",
+        choices=SUPPORTED_SELECTORS,
+        default=BASELINE_SELECTOR_NAME,
+        help=(
+            "Patch selector. Primary paper selectors: "
+            f"{', '.join(PRIMARY_SELECTORS)}. Legacy/experimental selectors kept "
+            f"for reproducibility: {', '.join(LEGACY_SELECTORS)}."
+        ),
+    )
     parser.add_argument("--patch-size", type=int, default=1024)
     parser.add_argument("--stride", type=int, default=1024)
     parser.add_argument("--max-patches", type=int, default=16)
@@ -49,7 +63,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "For smart/v3 selectors. 0 scores all thumbnail-filtered candidates; "
+            "For legacy smart/v3/v4 and v4.1 selectors. 0 scores all thumbnail-filtered candidates; "
             "N > 0 scores at most N candidates after seeded shuffle. Defaults to "
             "300 for smart v1/v2 and 2000 for v3_server_quality."
         ),
@@ -59,7 +73,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "For smart/v3 selectors. Downsampled patch size used for features. "
+            "For legacy smart/v3/v4 and v4.1 selectors. Downsampled patch size used for features. "
             "Defaults to 256 for smart v1/v2 and 512 for v3_server_quality."
         ),
     )
@@ -123,24 +137,24 @@ def parse_args() -> argparse.Namespace:
         "--redundancy-penalty-weight",
         type=float,
         default=0.10,
-        help="For v3_server_quality. Feature-space redundancy penalty weight.",
+        help="For v3/v4/v4.1 selectors. Feature-space redundancy penalty weight.",
     )
     parser.add_argument(
         "--min-quality-score",
         type=float,
         default=0.15,
-        help="For v3_server_quality. Minimum technical quality score for preferred selection.",
+        help="For v3/v4/v4.1 selectors. Minimum technical quality score for preferred selection.",
     )
     parser.add_argument(
         "--cache-features",
         action="store_true",
-        help="For v3_server_quality. Write scored_candidates.csv feature cache.",
+        help="For v3/v4/v4.1 selectors. Write scored_candidates.csv feature cache.",
     )
     parser.add_argument(
         "--resume",
         action="store_true",
         help=(
-            "For v3_server_quality. Reuse a compatible scored_candidates.csv cache "
+            "For v3/v4/v4.1 selectors. Reuse a compatible scored_candidates.csv cache "
             "when present; combine with --overwrite to rebuild outputs from cache."
         ),
     )
@@ -148,7 +162,7 @@ def parse_args() -> argparse.Namespace:
         "--output-mode",
         choices=("debug", "minimal", "full"),
         default="debug",
-        help="For v3_server_quality. Controls optional debug artifacts.",
+        help="For v3/v4/v4.1 selectors. Controls optional debug artifacts.",
     )
     parser.add_argument(
         "--embedding-backend",

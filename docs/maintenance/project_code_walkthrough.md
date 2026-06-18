@@ -495,10 +495,9 @@ Elementos importantes:
 - constantes como `BASELINE_SELECTOR_NAME`, `CANDIDATE_POOL`,
   `CANDIDATE_METADATA_SEMANTICS`
 
-Este módulo genera el pool de candidatos, evalúa patches reales hasta cumplir
-`max_patches`, guarda metadata y preview. Es un baseline técnico tipo
-TIAToolbox, no una llamada completa a una API oficial de TIAToolbox para todo
-el flujo.
+Este módulo genera el pool de candidatos con TIAToolbox
+`SlidingWindowPatchExtractor`, selecciona bajo `max_patches`, guarda metadata y
+preview. Es el baseline técnico real basado en TIAToolbox/Otsu.
 
 #### `smart_tissue_nuclei.py`
 
@@ -512,8 +511,8 @@ Elementos importantes:
 - `SMART_SELECTOR_NAME`
 - `SMART_V2_LIGHT_SELECTOR_NAME`
 
-Lee el mismo pool thumbnail-filtered, calcula features en una muestra de
-candidatos y selecciona bajo un presupuesto fijo.
+Lee el pool thumbnail-filtered manual del flujo propio, calcula features en una
+muestra de candidatos y selecciona bajo un presupuesto fijo.
 
 #### `scoring.py`
 
@@ -791,6 +790,17 @@ Define `read_image()` para cargar imágenes comunes con PIL.
 
 ## 6. Selectores de patches
 
+Flujo principal actual del paper:
+
+- `baseline_tiatoolbox`
+- `v4_1_medical_embedding_assisted`
+
+`smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light`,
+`v3_server_quality` y `v4_embedding_assisted` se conservan como iteraciones
+previas, ablations o soporte interno para reproducibilidad. En particular,
+v4.1 reutiliza helpers/scoring base de v3, pero v3 no se reporta como método
+principal independiente.
+
 ### 6.1 `baseline_tiatoolbox`
 
 `baseline_tiatoolbox` formaliza un baseline técnico real basado en TIAToolbox
@@ -866,12 +876,11 @@ Qué no hace:
 - no clasifica tumor;
 - no valida clínicamente los patches.
 
-Rol actual: versión intermedia/ablation para comparar contra baseline y
-`smart_tissue_nuclei_v2_light`.
+Rol actual: versión intermedia/ablation conservada para trazabilidad.
 
 ### 6.3 `smart_tissue_nuclei_v2_light`
 
-`smart_tissue_nuclei_v2_light` es el selector propio candidato final actual.
+`smart_tissue_nuclei_v2_light` es una iteración previa del selector propio.
 Mantiene la filosofía liviana y reproducible de v1, pero mejora tres aspectos:
 
 - proxy nuclear por HED color deconvolution;
@@ -893,13 +902,16 @@ Parámetros típicos:
 - `diversity_strategy = farthest_feature`
 - `feature_diversity_weight`
 
-Por qué se considera candidato final actual:
+Por qué se conserva:
 
 - estima mejor la señal nuclear que el proxy RGB simple;
 - mantiene una cobertura espacial más controlada;
 - reduce concentración en zonas cercanas;
 - sigue siendo CPU-friendly;
 - no introduce dependencias de modelos deep learning para selección.
+
+Rol actual: legacy/experimental para reproducibilidad, no flujo principal del
+paper.
 
 ### 6.4 `v3_server_quality`
 
@@ -910,7 +922,7 @@ crezca demasiado.
 
 Qué hace:
 
-- usa el mismo pool thumbnail-filtered que los demás selectores;
+- usa el pool thumbnail-filtered manual del flujo propio;
 - puede scorear más candidatos por corrida;
 - usa `feature_size` mayor por defecto;
 - calcula proxies técnicos de calidad segmentable, celularidad HED/RGB,
@@ -928,8 +940,8 @@ Qué no hace:
 - no calcula RCB;
 - no valida clínicamente los patches.
 
-Rol actual: selector server-quality no model-assisted. Sirve como base técnica
-para `v4_embedding_assisted`.
+Rol actual: selector server-quality no model-assisted y base técnica interna
+para `v4_embedding_assisted` y v4.1.
 
 ### 6.5 `v4_embedding_assisted`
 
@@ -967,10 +979,10 @@ conjunto de candidatos.
 
 ### 6.6 `v4_1_medical_embedding_assisted`
 
-`v4_1_medical_embedding_assisted` es una variante conservadora de v4. Mantiene
-`v3_server_quality` como score base, agrega features clasicas de procesamiento
-de imagen medica y usa UNI solo como reranker morfologico sobre candidatos
-tecnicamente fuertes.
+`v4_1_medical_embedding_assisted` es el selector técnico propuesto para la
+comparación principal del paper. Mantiene helpers/scoring base de
+`v3_server_quality`, agrega features clasicas de procesamiento de imagen medica
+y usa UNI solo como reranker morfologico sobre candidatos tecnicamente fuertes.
 
 Modulos principales:
 
@@ -1139,12 +1151,12 @@ referencia histórica.
 
 | componente | usa modelo deep learning | modelo usado | para qué se usa | qué NO hace |
 |---|---|---|---|---|
-| `baseline_tiatoolbox` | No | Ninguno | selección técnica por grilla, thumbnail y tejido | no segmenta, no usa DL, no diagnostica |
-| `smart_tissue_nuclei_v1` | No | Ninguno | selección técnica con features/proxies visuales | no usa segmentación, no detecta tumor |
-| `smart_tissue_nuclei_v2_light` | No | Ninguno | selección técnica con HED proxy, cuotas y diversidad | no usa DL, no valida clínicamente |
-| `v3_server_quality` | No | Ninguno | selección técnica server-quality con proxies de utilidad, diversidad y baja redundancia | no usa modelo de segmentación, no diagnostica |
-| `v4_embedding_assisted` | Sí, solo como extractor de embeddings | UNI | representación morfológica para diversidad, clusters y reducción de redundancia | no usa segmentación para seleccionar, no diagnostica |
-| `v4_1_medical_embedding_assisted` | Sí, solo como reranker morfológico | UNI + features clásicas | v3 dominante, calidad médica técnica y diversidad morfológica controlada | no usa segmentación para seleccionar, no diagnostica |
+| `baseline_tiatoolbox` | No | Ninguno | método principal: selección técnica TIAToolbox/Otsu | no segmenta, no usa DL, no diagnostica |
+| `v4_1_medical_embedding_assisted` | Sí, solo como reranker morfológico | UNI + features clásicas | método principal: calidad médica técnica y diversidad morfológica controlada | no usa segmentación para seleccionar, no diagnostica |
+| `smart_tissue_nuclei_v1` | No | Ninguno | legacy/ablation con features/proxies visuales | no usa segmentación, no detecta tumor |
+| `smart_tissue_nuclei_v2_light` | No | Ninguno | legacy/experimental con HED proxy, cuotas y diversidad | no usa DL, no valida clínicamente |
+| `v3_server_quality` | No | Ninguno | soporte interno server-quality con proxies de utilidad, diversidad y baja redundancia | no usa modelo de segmentación, no diagnostica |
+| `v4_embedding_assisted` | Sí, solo como extractor de embeddings | UNI | legacy/experimental para diversidad, clusters y reducción de redundancia | no usa segmentación para seleccionar, no diagnostica |
 | TIAToolbox segmentation | Sí | `fcn_resnet50_unet-bcss` | segmentación semántica posterior sobre patches seleccionados | no selecciona patches, no produce ground truth clínico |
 | Evaluación BCSS futura | No implementado como flujo completo | Pendiente | comparar predicción vs ground truth cuando exista integración | no forma parte central de resultados actuales |
 

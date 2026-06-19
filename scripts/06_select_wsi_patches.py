@@ -63,9 +63,10 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "For legacy smart/v3/v4 and v4.1 selectors. 0 scores all thumbnail-filtered candidates; "
+            "For legacy smart/v3/v4 and v4.1 selectors. 0 scores all candidates from the selector pool; "
             "N > 0 scores at most N candidates after seeded shuffle. Defaults to "
-            "300 for smart v1/v2 and 2000 for v3_server_quality."
+            "300 for smart v1/v2 and 2000 for v3/v4/v4.1. In v4.1, the pool is "
+            "the TIAToolbox/Otsu pool shared with baseline_tiatoolbox."
         ),
     )
     parser.add_argument(

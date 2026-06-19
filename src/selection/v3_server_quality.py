@@ -773,7 +773,7 @@ def _select_v3_records(
 
 
 def _candidate_record_from_patch(
-    candidate: PatchCandidate,
+    candidate: object,
     *,
     patch_image: object,
     config: V3ServerQualityConfig,
@@ -790,7 +790,8 @@ def _candidate_record_from_patch(
         "patch_size": candidate.patch_size,
         "width": patch_image.width,
         "height": patch_image.height,
-        "thumbnail_tissue_ratio": candidate.thumbnail_tissue_ratio,
+        "thumbnail_tissue_ratio": getattr(candidate, "thumbnail_tissue_ratio", ""),
+        "tiatoolbox_index": getattr(candidate, "tiatoolbox_index", ""),
         "feature_size": config.feature_size,
         **features,
     }

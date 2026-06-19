@@ -241,7 +241,7 @@ Esta selección usa proxies técnicos y embeddings para diversidad morfológica;
 
 ### 3.6. Etapa 3 - comparación principal baseline vs v4.1
 
-La comparación formal usa outputs existentes de ambos selectores, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula métricas técnicas. La comparación principal actual es `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`. Los pools iniciales pueden diferir: el baseline usa TIAToolbox/Otsu y v4.1 usa su generación propia con ranking técnico; esa diferencia debe reportarse.
+La comparación formal usa outputs existentes de ambos selectores, mide overlap entre seleccionados, recalcula features en los PNG seleccionados y calcula métricas técnicas. La comparación principal actual es `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`. Para aislar el efecto del ranking final, ambos métodos parten del mismo pool TIAToolbox/Otsu generado con `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`; v4.1 aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico sobre ese universo común.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \

@@ -19,10 +19,8 @@ import numpy as np
 
 from src.preprocessing.wsi_patch_extraction import (
     SUPPORTED_WSI_EXTENSIONS,
-    TISSUE_MASK_METHOD,
     _import_openslide,
 )
-from src.selection.candidate_generation import generate_tissue_candidates
 from src.selection.diversity import (
     assign_spatial_regions,
     feature_diversity_bonus,
@@ -57,10 +55,17 @@ from src.selection.quality_filters import (
     VISUAL_ENTROPY_METHOD,
 )
 from src.selection.tiatoolbox_baseline import (
-    CANDIDATE_METADATA_SEMANTICS,
-    CANDIDATE_POOL,
     CLINICAL_WARNING,
+    TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
+    TIATOOLBOX_CANDIDATE_POOL,
+    TIATOOLBOX_EXTRACTION_BACKEND,
+    TIATOOLBOX_EXTRACTOR_NAME,
+    TIATOOLBOX_INPUT_MASK,
+    TIATOOLBOX_TISSUE_MASK_METHOD,
     _base_slide_metadata,
+    _build_tiatoolbox_extractor,
+    _candidate_pool_row as _tiatoolbox_candidate_pool_row,
+    _candidates_from_extractor,
     _prepare_output_dir,
     _resolve_output_dir,
 )
@@ -72,7 +77,6 @@ from src.selection.v3_server_quality import (
     V3_NORMALIZED_FIELDS,
     V3_WEIGHTS,
     _apply_v3_scores,
-    _candidate_pool_row,
     _candidate_record_from_patch,
     _format_float,
     _safe_float,
@@ -100,7 +104,7 @@ from src.selection.v4_embedding_assisted import (
 V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME = "v4_1_medical_embedding_assisted"
 V41_SELECTOR_VERSION = "v4_1_medical_embedding_assisted_1.0"
 V41_CANDIDATE_ORDERING = (
-    "thumbnail_filtered_seeded_shuffle_then_v3_medical_quality_filter_then_uni_embedding_rerank"
+    "tiatoolbox_otsu_seeded_shuffle_then_v3_medical_quality_filter_then_uni_embedding_rerank"
 )
 V41_PREVIEW_SHOWS = "scored_candidates_with_v3_medical_embedding_selected_highlighted"
 V41_MEDICAL_RERANK_MODES = {"top_v3_then_embedding"}
@@ -265,18 +269,25 @@ def _method_config(
     *,
     min_distance_level0: int,
     embedding_cache_path: Path,
+    tiatoolbox_version: str | None = None,
 ) -> dict[str, object]:
     return {
         "selector": config.selector,
         "selector_name": config.selector,
         "version": V41_SELECTOR_VERSION,
-        "candidate_pool": CANDIDATE_POOL,
-        "candidate_metadata_semantics": CANDIDATE_METADATA_SEMANTICS,
+        "candidate_pool": TIATOOLBOX_CANDIDATE_POOL,
+        "candidate_metadata_semantics": TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
+        "candidate_pool_definition": (
+            "TIAToolbox sliding-window candidates passing Otsu input mask and min_mask_ratio."
+        ),
+        "candidate_pool_shared_with_baseline": True,
+        "shared_candidate_pool_selector": "baseline_tiatoolbox",
         "candidate_ordering": V41_CANDIDATE_ORDERING,
         "patch_size": config.patch_size,
         "stride": config.stride,
         "max_patches": config.max_patches,
         "min_tissue_ratio": config.min_tissue_ratio,
+        "min_mask_ratio": config.min_tissue_ratio,
         "seed": config.seed,
         "thumbnail_max_size": config.thumbnail_max_size,
         "feature_size": config.feature_size,
@@ -326,7 +337,11 @@ def _method_config(
         "no_deep_learning_used_for_selection": False,
         "segmentation_model_used_for_selection": False,
         "selection_model_note": NO_MODEL_SELECTION_NOTE,
-        "tissue_mask_method": TISSUE_MASK_METHOD,
+        "extraction_backend": TIATOOLBOX_EXTRACTION_BACKEND,
+        "tiatoolbox_version": tiatoolbox_version,
+        "tiatoolbox_extractor": TIATOOLBOX_EXTRACTOR_NAME,
+        "input_mask": TIATOOLBOX_INPUT_MASK,
+        "tissue_mask_method": TIATOOLBOX_TISSUE_MASK_METHOD,
         "nuclear_signal_rgb_method": RGB_NUCLEAR_SIGNAL_METHOD,
         "nuclear_signal_hed_method": HED_NUCLEAR_SIGNAL_METHOD,
         "visual_entropy_method": VISUAL_ENTROPY_METHOD,
@@ -335,6 +350,40 @@ def _method_config(
         "clinical_warning": CLINICAL_WARNING,
         "created_at": utc_now_iso(),
     }
+
+
+def _v41_candidate_pool_row(
+    candidate: object,
+    *,
+    config: V41MedicalEmbeddingAssistedConfig,
+    wsi_path: Path,
+    slide_metadata: dict[str, Any],
+) -> dict[str, object]:
+    row = _tiatoolbox_candidate_pool_row(
+        candidate,
+        config=config,
+        wsi_path=wsi_path,
+        slide_metadata=slide_metadata,
+    )
+    row.update(
+        {
+            "scored": False,
+            "nuclear_proxy": "hed_deconvolution",
+            "score_raw": "",
+            "score_final": "",
+            "usefulness_reason": "",
+            "quota_grid": config.quota_grid,
+            "spatial_strategy": "quotas",
+            "diversity_strategy": "farthest_feature",
+            "embedding_backend": config.embedding_backend,
+            "embedding_model_name": config.embedding_model_name,
+            "selector": config.selector,
+            "selection_method": config.selector,
+            "tissue_mask_method": TIATOOLBOX_TISSUE_MASK_METHOD,
+            "clinical_warning": CLINICAL_WARNING,
+        }
+    )
+    return row
 
 
 def _score_quantile_by_field(
@@ -885,6 +934,10 @@ def run_v4_1_medical_embedding_assisted_selection(
     scored_candidates_path = output_dir / SCORED_CANDIDATES_FILE
     cluster_summary_path = output_dir / EMBEDDING_CLUSTER_SUMMARY_FILE
 
+    extractor, tiatoolbox_version = _build_tiatoolbox_extractor(
+        wsi_path=wsi_path,
+        config=config,
+    )
     _prepare_output_dir(
         output_dir=output_dir,
         root_dir=root_dir,
@@ -895,6 +948,7 @@ def run_v4_1_medical_embedding_assisted_selection(
             config,
             min_distance_level0=min_distance_level0,
             embedding_cache_path=embedding_cache_path,
+            tiatoolbox_version=tiatoolbox_version,
         ),
         method_config_path,
     )
@@ -910,20 +964,18 @@ def run_v4_1_medical_embedding_assisted_selection(
         thumbnail = slide.get_thumbnail(
             (config.thumbnail_max_size, config.thumbnail_max_size)
         ).convert("RGB")
-        candidates, num_candidates_generated = generate_tissue_candidates(
-            thumbnail=thumbnail,
-            slide_dimensions=slide_dimensions,
+        candidates = _candidates_from_extractor(
+            extractor=extractor,
             patch_size=config.patch_size,
-            stride=config.stride,
-            min_tissue_ratio=config.min_tissue_ratio,
         )
+        num_candidates_generated = len(candidates)
         candidates_to_score = _select_candidates_to_score(
             candidates,
             seed=config.seed,
             max_candidates_to_score=config.max_candidates_to_score,
         )
         candidate_rows = [
-            _candidate_pool_row(
+            _v41_candidate_pool_row(
                 candidate,
                 config=config,
                 wsi_path=wsi_path,
@@ -1081,6 +1133,7 @@ def run_v4_1_medical_embedding_assisted_selection(
             "stride": config.stride,
             "max_patches": config.max_patches,
             "min_tissue_ratio": config.min_tissue_ratio,
+            "min_mask_ratio": config.min_tissue_ratio,
             "seed": config.seed,
             "thumbnail_max_size": config.thumbnail_max_size,
             "feature_size": config.feature_size,
@@ -1161,11 +1214,20 @@ def run_v4_1_medical_embedding_assisted_selection(
             "method_config_json": str(method_config_path),
             "preview_image": str(preview_path),
             "selected_dir": str(selected_dir),
-            "candidate_pool": CANDIDATE_POOL,
-            "candidate_metadata_semantics": CANDIDATE_METADATA_SEMANTICS,
+            "candidate_pool": TIATOOLBOX_CANDIDATE_POOL,
+            "candidate_metadata_semantics": TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
+            "candidate_pool_definition": (
+                "TIAToolbox sliding-window candidates passing Otsu input mask and min_mask_ratio."
+            ),
+            "candidate_pool_shared_with_baseline": True,
+            "shared_candidate_pool_selector": "baseline_tiatoolbox",
             "preview_shows": V41_PREVIEW_SHOWS,
             "candidate_ordering": V41_CANDIDATE_ORDERING,
-            "tissue_mask_method": TISSUE_MASK_METHOD,
+            "extraction_backend": TIATOOLBOX_EXTRACTION_BACKEND,
+            "tiatoolbox_version": tiatoolbox_version,
+            "tiatoolbox_extractor": TIATOOLBOX_EXTRACTOR_NAME,
+            "input_mask": TIATOOLBOX_INPUT_MASK,
+            "tissue_mask_method": TIATOOLBOX_TISSUE_MASK_METHOD,
             "nuclear_signal_rgb_method": RGB_NUCLEAR_SIGNAL_METHOD,
             "nuclear_signal_hed_method": HED_NUCLEAR_SIGNAL_METHOD,
             "visual_entropy_method": VISUAL_ENTROPY_METHOD,

@@ -64,7 +64,7 @@ Para el flujo principal del paper se consideran dos métodos:
 
 `smart_tissue_nuclei_v1`, `smart_tissue_nuclei_v2_light`, `v3_server_quality` y `v4_embedding_assisted` siguen disponibles como métodos legacy/experimentales para trazabilidad y reproducibilidad. `v4_1_medical_embedding_assisted` puede reutilizar funciones internas de `v3_server_quality` para scoring/base técnica; esto no implica que `v3_server_quality` se ejecute como método principal.
 
-Los métodos no comparten necesariamente el mismo pool inicial de candidatos. El baseline utiliza el pool generado por TIAToolbox con máscara Otsu, mientras que v4.1 utiliza su propia generación de candidatos y posterior ranking técnico. Esta diferencia debe reportarse como parte de la configuración experimental.
+Para aislar el efecto del ranking y selección final, `baseline_tiatoolbox` y `v4_1_medical_embedding_assisted` parten del mismo pool inicial de candidatos generado con TIAToolbox `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`. El baseline selecciona de forma reproducible desde ese pool, mientras que v4.1 aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico sobre el mismo universo inicial.
 
 ## Estructura del repositorio
 
@@ -366,7 +366,7 @@ KMP_DUPLICATE_LIB_OK=TRUE /Users/davidkripper/miniforge3/envs/inf402-lumina-seg/
 
 ## Etapa 3 - comparación de selectores
 
-La comparación formal toma dos carpetas ya generadas y recalcula features solo sobre los PNG seleccionados. La comparación principal actual es `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`. Los pools iniciales pueden diferir: el baseline usa TIAToolbox/Otsu y v4.1 usa su generación propia con ranking técnico.
+La comparación formal toma dos carpetas ya generadas y recalcula features solo sobre los PNG seleccionados. La comparación principal actual es `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`. Ambos métodos parten del mismo pool TIAToolbox/Otsu; la diferencia experimental se concentra en cómo seleccionan los patches finales desde ese universo común.
 
 ```bash
 conda run -n inf402-lumina-seg python scripts/07_compare_patch_selectors.py \

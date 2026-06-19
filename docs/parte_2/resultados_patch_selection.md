@@ -22,7 +22,7 @@ WSI H&E
   -> segmentacion semantica posterior como validacion visual/tecnica
 ```
 
-La idea experimental clave es mantener trazabilidad de pool y el mismo presupuesto de patches por WSI. Los metodos no comparten necesariamente el mismo pool inicial: el baseline usa TIAToolbox/Otsu, mientras que v4.1 usa su propia generacion de candidatos y ranking tecnico. Esta diferencia debe reportarse explicitamente en la comparacion.
+La idea experimental clave es mantener trazabilidad de pool y el mismo presupuesto de patches por WSI. Para aislar el efecto del ranking y seleccion final, `baseline_tiatoolbox` y `v4_1_medical_embedding_assisted` parten del mismo pool inicial generado con TIAToolbox `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`. El baseline selecciona de forma reproducible desde ese pool; v4.1 aplica scoring tecnico, proxies de imagen medica, embeddings UNI y reranking morfologico sobre el mismo universo inicial.
 
 ## 3. Baseline: baseline_tiatoolbox
 
@@ -59,7 +59,7 @@ En la corrida de cierre:
 
 ```text
 selector: v4_1_medical_embedding_assisted
-candidate rows: 1497
+candidate rows: 1427
 selected patches: 16
 segmentation_model_used_for_selection: false
 embedding_backend: uni
@@ -94,7 +94,7 @@ embedding_model_name: UNI
 
 **Feature diversity**: bonificacion para seleccionar patches distintos entre si en el espacio de features, reduciendo redundancia.
 
-**Candidate pool**: conjunto de candidatos que pasa el filtro inicial de cada metodo. En el flujo principal actual, baseline y v4.1 no comparten necesariamente el mismo pool: baseline usa TIAToolbox/Otsu y v4.1 usa su generacion propia con ranking tecnico.
+**Candidate pool**: conjunto de candidatos que pasa el filtro inicial. En el flujo principal actual, baseline y v4.1 comparten el mismo pool TIAToolbox/Otsu; la diferencia experimental esta en la seleccion reproducible del baseline versus el scoring/reranking tecnico de v4.1.
 
 ## 6. Features utilizadas por el selector
 
@@ -117,9 +117,9 @@ embedding_model_name: UNI
 `v4_1_medical_embedding_assisted` opera asi:
 
 1. Carga una WSI con OpenSlide.
-2. Genera un thumbnail liviano.
-3. Construye una mascara de tejido.
-4. Genera su pool propio de candidatos.
+2. Genera el pool inicial compartido con TIAToolbox `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`.
+3. Conserva `tiatoolbox_index` para trazabilidad.
+4. Aplica shuffle reproducible y limita los candidatos a scorear si corresponde.
 5. Scorea una cantidad controlada de candidatos.
 6. Calcula proxies tecnicos de calidad, tejido, tincion/textura, nitidez, artefactos y pseudo-celularidad.
 7. Normaliza features.
@@ -168,9 +168,9 @@ Resultados principales de auditoria de outputs existentes `baseline_tiatoolbox` 
 | Metrica | Baseline | v4.1 | Lectura tecnica |
 | --- | ---: | ---: | --- |
 | selected patches | 16 | 16 | Mismo presupuesto. |
-| candidate rows | 1427 | 1497 | Los pools son distintos por diseno experimental. |
-| pool inicial | TIAToolbox/Otsu | pool propio/manual + ranking tecnico | La diferencia debe reportarse, no ocultarse. |
-| selected coordinate overlap | 1 | 1 | Hay una coordenada seleccionada compartida. |
+| candidate rows | 1427 | 1427 | Mismo pool inicial con la misma configuracion. |
+| pool inicial | TIAToolbox/Otsu | TIAToolbox/Otsu + ranking tecnico | La diferencia esta en el ranking/seleccion final. |
+| selected coordinate overlap | 0 | 0 | El universo inicial es compartido, pero la seleccion final no coincide. |
 | segmentation_model_used_for_selection | no aplica | false | v4.1 no usa segmentacion para seleccionar. |
 | embedding_backend | no aplica | uni | UNI se usa como reranking morfologico, no diagnostico. |
 

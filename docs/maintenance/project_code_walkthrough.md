@@ -980,7 +980,8 @@ conjunto de candidatos.
 ### 6.6 `v4_1_medical_embedding_assisted`
 
 `v4_1_medical_embedding_assisted` es el selector técnico propuesto para la
-comparación principal del paper. Mantiene helpers/scoring base de
+comparación principal del paper. Parte del mismo pool inicial TIAToolbox/Otsu
+que `baseline_tiatoolbox`, mantiene helpers/scoring base de
 `v3_server_quality`, agrega features clasicas de procesamiento de imagen medica
 y usa UNI solo como reranker morfologico sobre candidatos tecnicamente fuertes.
 
@@ -999,11 +1000,14 @@ Features nuevas:
 
 Estrategia:
 
-1. Scorea candidatos con v3.
-2. Calcula features medicas clasicas.
-3. Filtra candidatos por `score_v3_base`, calidad/utilidad medica y artefactos.
-4. Reutiliza o calcula embeddings UNI.
-5. Selecciona con diversidad espacial y diversidad morfologica controlada.
+1. Genera candidatos con TIAToolbox `SlidingWindowPatchExtractor`,
+   `input_mask="otsu"` y `min_mask_ratio`.
+2. Conserva `tiatoolbox_index` para trazar cada candidato al pool inicial.
+3. Scorea una muestra reproducible de candidatos con helpers/base v3.
+4. Calcula features medicas clasicas.
+5. Filtra candidatos por `score_v3_base`, calidad/utilidad medica y artefactos.
+6. Reutiliza o calcula embeddings UNI.
+7. Selecciona con diversidad espacial y diversidad morfologica controlada.
 
 Que no hace:
 
@@ -1098,7 +1102,8 @@ Salida:
 
 Diferencia clave:
 
-- `candidate_metadata.csv`: pool común thumbnail-filtered.
+- `candidate_metadata.csv`: pool común TIAToolbox/Otsu para la comparación
+  principal `baseline_tiatoolbox` vs `v4_1_medical_embedding_assisted`.
 - `selected_metadata.csv`: solo patches finalmente seleccionados.
 
 ### Flujo C: comparación de selectores

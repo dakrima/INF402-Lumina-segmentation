@@ -60,6 +60,16 @@ def parse_args() -> argparse.Namespace:
             "incompatible patch shape, dtype, range, or channel count."
         ),
     )
+    parser.add_argument(
+        "--save-probabilities",
+        action="store_true",
+        help="Save raw probability arrays when TIAToolbox exposes them. Disabled by default.",
+    )
+    parser.add_argument(
+        "--save-visual-labels-npy",
+        action="store_true",
+        help="Save the visualization-resized label array as prediction_labels_visual.npy.",
+    )
     return parser.parse_args()
 
 
@@ -74,7 +84,9 @@ def main() -> int:
     print(f"Input mode: {args.input_mode}")
     print(f"Output dir: {args.output_dir}")
     print(f"Strict input validation: {args.strict_input_validation}")
-    print("Clinical warning: technical smoke test only; not diagnosis, not RCB.")
+    print(f"Save probabilities: {args.save_probabilities}")
+    print(f"Save visual labels npy: {args.save_visual_labels_npy}")
+    print("Clinical warning: Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation.")
 
     summary, summary_path = run_inference_smoke_test(
         image_path=args.image_path,
@@ -86,6 +98,8 @@ def main() -> int:
         overlay_alpha=args.overlay_alpha,
         clear_output=args.clear_output,
         strict_input_validation=args.strict_input_validation,
+        save_probabilities=args.save_probabilities,
+        save_visual_labels_npy=args.save_visual_labels_npy,
     )
 
     print(f"Status: {summary['status']}")
@@ -99,6 +113,8 @@ def main() -> int:
     print(f"Resized for visualization: {summary.get('resized_for_visualization')}")
     print(f"Unique prediction values: {summary.get('unique_prediction_values')}")
     print(f"Input validation: {summary.get('input_validation', {}).get('status')}")
+    print(f"Class count source: {summary.get('class_count_source')}")
+    print(f"Probability summary available: {summary.get('probability_summary', {}).get('available')}")
     print(f"Class mapping source: {summary.get('class_mapping_source')}")
     print(f"Legend JSON: {summary.get('legend_json')}")
     print(f"Legend PNG: {summary.get('legend_png')}")
@@ -106,7 +122,10 @@ def main() -> int:
 
     if summary["status"] == "completed":
         print(f"Input preview: {summary['outputs']['input_preview']}")
+        print(f"Raw prediction mask: {summary['outputs']['prediction_mask_raw']}")
+        print(f"Visual prediction mask: {summary['outputs']['prediction_mask_visual']}")
         print(f"Prediction mask: {summary['outputs']['prediction_mask']}")
+        print(f"Raw prediction labels: {summary['outputs']['prediction_labels_raw_npy']}")
         print(f"Prediction overlay: {summary['outputs']['prediction_overlay']}")
         print(f"Overlay with legend: {summary['outputs']['prediction_overlay_with_legend']}")
         for warning in summary.get("warnings", []):

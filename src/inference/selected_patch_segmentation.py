@@ -21,14 +21,12 @@ from src.inference.input_validation import (
 
 
 CLINICAL_WARNING = (
-    "Technical segmentation over selected patches only. Not for diagnosis, "
-    "not RCB, not clinical validation."
+    "Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation."
 )
 PREDICTION_RESOLUTION_NOTE = (
-    "The raw prediction mask may have a different resolution than the input patch. "
-    "For visualization, masks are resized to the patch size using nearest-neighbor "
-    "interpolation to preserve discrete class labels. Pixel counts refer to the raw "
-    "prediction resolution unless explicitly stated otherwise."
+    "Class counts and ratios are computed on the raw prediction mask. "
+    "Visual masks and overlays may be resized with nearest-neighbor interpolation "
+    "only for visual inspection over the input patch."
 )
 REQUIRED_SELECTION_FILES = [
     "selected_metadata.csv",
@@ -53,7 +51,21 @@ PER_PATCH_SEGMENTATION_FIELDS = [
     "visualized_mask_shape",
     "unique_prediction_values",
     "class_pixel_counts",
+    "class_pixel_ratios",
+    "class_count_source",
+    "raw_prediction_total_pixels",
+    "visualized_prediction_total_pixels",
+    "probability_summary",
+    "mean_max_probability",
+    "median_max_probability",
+    "min_max_probability",
+    "max_max_probability",
     "mask_path",
+    "prediction_mask_raw_path",
+    "prediction_mask_visual_path",
+    "prediction_labels_raw_npy_path",
+    "prediction_labels_visual_npy_path",
+    "prediction_probabilities_npz_path",
     "overlay_path",
     "overlay_with_legend_path",
     "input_preview_path",
@@ -120,6 +132,8 @@ class SelectedPatchSegmentationConfig:
     limit_patches: int | None = None
     overwrite: bool = False
     strict_input_validation: bool = False
+    save_probabilities: bool = False
+    save_visual_labels_npy: bool = False
 
 
 def _resolve_path(path: Path, root_dir: Path) -> Path:
@@ -168,6 +182,10 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
     for child_dir in [
         output_dir,
         output_dir / "masks",
+        output_dir / "masks_raw",
+        output_dir / "masks_visual",
+        output_dir / "labels_raw",
+        output_dir / "labels_visual",
         output_dir / "overlays",
         output_dir / "overlays_with_legend",
         output_dir / "input_previews",
@@ -344,7 +362,21 @@ def _empty_result_row(
         "visualized_mask_shape": "",
         "unique_prediction_values": "",
         "class_pixel_counts": "",
+        "class_pixel_ratios": "",
+        "class_count_source": "",
+        "raw_prediction_total_pixels": "",
+        "visualized_prediction_total_pixels": "",
+        "probability_summary": "",
+        "mean_max_probability": "",
+        "median_max_probability": "",
+        "min_max_probability": "",
+        "max_max_probability": "",
         "mask_path": "",
+        "prediction_mask_raw_path": "",
+        "prediction_mask_visual_path": "",
+        "prediction_labels_raw_npy_path": "",
+        "prediction_labels_visual_npy_path": "",
+        "prediction_probabilities_npz_path": "",
         "overlay_path": "",
         "overlay_with_legend_path": "",
         "input_preview_path": "",
@@ -364,8 +396,23 @@ def _copy_completed_outputs(
 ) -> dict[str, str]:
     outputs = patch_summary.get("outputs", {})
     copy_specs = {
+        "prediction_mask_raw": (
+            output_dir / "masks_raw" / f"{patch_id}__prediction_mask_raw.png"
+        ),
+        "prediction_mask_visual": (
+            output_dir / "masks_visual" / f"{patch_id}__prediction_mask_visual.png"
+        ),
         "prediction_mask": (
             output_dir / "masks" / f"{patch_id}__prediction_mask.png"
+        ),
+        "prediction_labels_raw_npy": (
+            output_dir / "labels_raw" / f"{patch_id}__prediction_labels_raw.npy"
+        ),
+        "prediction_labels_visual_npy": (
+            output_dir / "labels_visual" / f"{patch_id}__prediction_labels_visual.npy"
+        ),
+        "prediction_probabilities_npz": (
+            output_dir / "labels_raw" / f"{patch_id}__prediction_probabilities.npz"
         ),
         "prediction_overlay": (
             output_dir / "overlays" / f"{patch_id}__prediction_overlay.png"
@@ -407,6 +454,7 @@ def _result_row_from_summary(
     patch_warnings = patch_summary.get("warnings") or []
     selection_metadata = patch_summary.get("selection_metadata")
     input_validation = patch_summary.get("input_validation")
+    probability_summary = patch_summary.get("probability_summary") or {}
     return {
         "patch_id": patch_id,
         "filename": source_row.get("filename", ""),
@@ -424,7 +472,30 @@ def _result_row_from_summary(
         "visualized_mask_shape": _json_cell(patch_summary.get("visualized_mask_shape")),
         "unique_prediction_values": _json_cell(patch_summary.get("unique_prediction_values")),
         "class_pixel_counts": _json_cell(patch_summary.get("class_pixel_counts")),
+        "class_pixel_ratios": _json_cell(patch_summary.get("class_pixel_ratios")),
+        "class_count_source": patch_summary.get("class_count_source", ""),
+        "raw_prediction_total_pixels": patch_summary.get("raw_prediction_total_pixels", ""),
+        "visualized_prediction_total_pixels": patch_summary.get(
+            "visualized_prediction_total_pixels",
+            "",
+        ),
+        "probability_summary": _json_cell(probability_summary),
+        "mean_max_probability": probability_summary.get("mean_max_probability", ""),
+        "median_max_probability": probability_summary.get("median_max_probability", ""),
+        "min_max_probability": probability_summary.get("min_max_probability", ""),
+        "max_max_probability": probability_summary.get("max_max_probability", ""),
         "mask_path": copied_outputs.get("prediction_mask", ""),
+        "prediction_mask_raw_path": copied_outputs.get("prediction_mask_raw", ""),
+        "prediction_mask_visual_path": copied_outputs.get("prediction_mask_visual", ""),
+        "prediction_labels_raw_npy_path": copied_outputs.get("prediction_labels_raw_npy", ""),
+        "prediction_labels_visual_npy_path": copied_outputs.get(
+            "prediction_labels_visual_npy",
+            "",
+        ),
+        "prediction_probabilities_npz_path": copied_outputs.get(
+            "prediction_probabilities_npz",
+            "",
+        ),
         "overlay_path": copied_outputs.get("prediction_overlay", ""),
         "overlay_with_legend_path": copied_outputs.get(
             "prediction_overlay_with_legend",
@@ -433,7 +504,7 @@ def _result_row_from_summary(
         "input_preview_path": copied_outputs.get("input_preview", ""),
         "patch_inference_summary_path": str(patch_summary_path),
         "input_image_shape": _json_cell(_shape_from_image_size(patch_summary)),
-        "raw_prediction_shape": _json_cell(patch_summary.get("prediction_shape")),
+        "raw_prediction_shape": _json_cell(patch_summary.get("raw_prediction_shape")),
         "resized_for_visualization": (
             "true" if _summary_was_resized_for_visualization(patch_summary) else "false"
         ),
@@ -455,6 +526,8 @@ def _method_config_payload(
         "input_selection_dir": str(input_selection_dir),
         "limit_patches": config.limit_patches,
         "strict_input_validation": config.strict_input_validation,
+        "save_probabilities": config.save_probabilities,
+        "save_visual_labels_npy": config.save_visual_labels_npy,
         "created_at": _utc_now_iso(),
         "clinical_warning": CLINICAL_WARNING,
     }
@@ -559,6 +632,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
     num_patch_warnings = 0
     num_patches_with_warnings = 0
     num_patches_with_resized_visualization = 0
+    num_patches_with_probability_summary = 0
     unique_patch_warnings: set[str] = set()
 
     for index, row in enumerate(selected_rows, start=1):
@@ -626,6 +700,8 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                 clear_output=True,
                 strict_input_validation=config.strict_input_validation,
                 selection_metadata=selection_metadata,
+                save_probabilities=config.save_probabilities,
+                save_visual_labels_npy=config.save_visual_labels_npy,
             )
             patch_warnings = [str(warning) for warning in patch_summary.get("warnings") or []]
             if patch_warnings:
@@ -634,6 +710,8 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                 unique_patch_warnings.update(patch_warnings)
             if _summary_was_resized_for_visualization(patch_summary):
                 num_patches_with_resized_visualization += 1
+            if (patch_summary.get("probability_summary") or {}).get("available") is True:
+                num_patches_with_probability_summary += 1
             copied_outputs = (
                 _copy_completed_outputs(patch_id, patch_summary, output_dir)
                 if patch_summary.get("status") == "completed"
@@ -704,7 +782,10 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         "num_patches_with_warnings": num_patches_with_warnings,
         "unique_patch_warnings": sorted(unique_patch_warnings),
         "num_patches_with_resized_visualization": num_patches_with_resized_visualization,
+        "num_patches_with_probability_summary": num_patches_with_probability_summary,
         "strict_input_validation": config.strict_input_validation,
+        "save_probabilities": config.save_probabilities,
+        "save_visual_labels_npy": config.save_visual_labels_npy,
         "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
         "input_validation_summary": input_validation_summary,
         "input_validation_summary_json": str(input_validation_summary_path),

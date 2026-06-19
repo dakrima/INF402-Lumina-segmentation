@@ -25,7 +25,12 @@ from src.visualization.segmentation_overlay import (
 
 
 CLINICAL_WARNING = (
-    "Technical smoke test only. Not for diagnosis, not RCB, not clinical validation."
+    "Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation."
+)
+PREDICTION_RESOLUTION_NOTE = (
+    "Class counts and ratios are computed on the raw prediction mask. "
+    "Visual masks and overlays may be resized with nearest-neighbor interpolation "
+    "only for visual inspection over the input patch."
 )
 CLASS_MAPPING_WARNING = (
     "Class names were not confirmed from TIAToolbox/BCSS metadata. "
@@ -183,6 +188,17 @@ def _summary_base(
         },
         "class_mapping_references": CLASS_MAPPING_REFERENCES,
         "class_pixel_counts": {},
+        "class_pixel_ratios": {},
+        "class_count_source": "raw_prediction_mask",
+        "raw_prediction_total_pixels": None,
+        "visualized_prediction_total_pixels": None,
+        "total_prediction_pixels": None,
+        "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
+        "probability_summary": {
+            "available": False,
+            "reason": "Probability summary was not computed.",
+        },
+        "inference_config": {},
         "legend_json": None,
         "legend_png": None,
         "tiatoolbox_output": None,
@@ -190,7 +206,12 @@ def _summary_base(
         "prediction_source": None,
         "outputs": {
             "input_preview": str(output_dir / "input_preview.png"),
+            "prediction_mask_raw": str(output_dir / "prediction_mask_raw.png"),
+            "prediction_mask_visual": str(output_dir / "prediction_mask_visual.png"),
             "prediction_mask": str(output_dir / "prediction_mask.png"),
+            "prediction_labels_raw_npy": str(output_dir / "prediction_labels_raw.npy"),
+            "prediction_labels_visual_npy": None,
+            "prediction_probabilities_npz": None,
             "prediction_overlay": str(output_dir / "prediction_overlay.png"),
             "prediction_overlay_with_legend": str(
                 output_dir / "prediction_overlay_with_legend.png"
@@ -256,6 +277,15 @@ def _array_from_zarr_group(zarr_group: object, key: str) -> np.ndarray | None:
     if key not in list(zarr_group.keys()):
         return None
     return np.asarray(zarr_group[key])
+
+
+def _probability_from_zarr(zarr_path: Path) -> tuple[np.ndarray | None, str | None, str | None]:
+    zarr_module = _import_required_module("zarr")
+    zarr_group = zarr_module.open(str(zarr_path), mode="r")
+    probabilities = _array_from_zarr_group(zarr_group, "probabilities")
+    if probabilities is None:
+        return None, None, f"No probabilities array found in zarr output. Keys: {list(zarr_group.keys())}"
+    return probabilities, "zarr.probabilities", None
 
 
 def _prediction_from_zarr(zarr_path: Path) -> tuple[np.ndarray, str]:
@@ -453,18 +483,31 @@ def build_class_legend(
     class_names: dict[int, str],
     mapping_source: str,
     mapping_warning: str | None,
-) -> tuple[dict[str, Any], dict[str, int]]:
+) -> tuple[dict[str, Any], dict[str, int], dict[str, float]]:
     """Build a technical class/color legend from the predicted label mask."""
     label_mask = normalize_label_mask(label_mask)
     unique_values, counts = np.unique(label_mask, return_counts=True)
     total_pixels = int(label_mask.size)
-    class_pixel_counts: dict[str, int] = {}
+    visible_class_ids = sorted(set(class_names) | {int(value) for value in unique_values})
+    class_pixel_counts: dict[str, int] = {
+        str(class_id): 0 for class_id in visible_class_ids
+    }
+    class_pixel_ratios: dict[str, float] = {
+        str(class_id): 0.0 for class_id in visible_class_ids
+    }
     classes: list[dict[str, Any]] = []
 
-    for class_id_raw, count_raw in zip(unique_values, counts, strict=True):
-        class_id = int(class_id_raw)
-        count = int(count_raw)
+    observed_counts = {
+        int(class_id_raw): int(count_raw)
+        for class_id_raw, count_raw in zip(unique_values, counts, strict=True)
+    }
+    for class_id, count in observed_counts.items():
         class_pixel_counts[str(class_id)] = count
+        class_pixel_ratios[str(class_id)] = count / total_pixels if total_pixels else 0.0
+
+    for class_id in visible_class_ids:
+        count = class_pixel_counts[str(class_id)]
+        ratio = class_pixel_ratios[str(class_id)]
         class_name = class_names.get(class_id, "unconfirmed")
         if class_id not in class_names:
             class_name_status = "unconfirmed"
@@ -480,7 +523,7 @@ def build_class_legend(
                 "class_name_status": class_name_status,
                 "color_rgb": color_rgb,
                 "pixel_count": count,
-                "pixel_ratio": count / total_pixels if total_pixels else 0.0,
+                "pixel_ratio": ratio,
             }
         )
 
@@ -515,11 +558,16 @@ def build_class_legend(
             "warning": RAW_BCSS_ZERO_WARNING,
         },
         "class_mapping_references": CLASS_MAPPING_REFERENCES,
-        "count_source": "prediction_mask_before_visual_resize",
+        "count_source": "raw_prediction_mask",
+        "class_count_source": "raw_prediction_mask",
         "total_pixels": total_pixels,
+        "total_prediction_pixels": total_pixels,
+        "class_pixel_counts": class_pixel_counts,
+        "class_pixel_ratios": class_pixel_ratios,
+        "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
         "classes": classes,
     }
-    return legend, class_pixel_counts
+    return legend, class_pixel_counts, class_pixel_ratios
 
 
 def _to_numpy_array(value: object) -> np.ndarray:
@@ -531,6 +579,127 @@ def _to_numpy_array(value: object) -> np.ndarray:
     if hasattr(value, "detach") and hasattr(value, "cpu"):
         return value.detach().cpu().numpy()
     return np.asarray(value)
+
+
+def _probability_from_dict(run_output: dict[Any, Any]) -> tuple[np.ndarray | None, str | None, str | None]:
+    probability_keys = ("probabilities", "probability", "probs")
+    parse_errors: list[str] = []
+
+    for key in probability_keys:
+        if key in run_output:
+            try:
+                return _to_numpy_array(run_output[key]), str(key), None
+            except Exception as exc:  # noqa: BLE001 - preserve diagnostic
+                parse_errors.append(f"{key}: {exc}")
+
+    for key, value in run_output.items():
+        if isinstance(value, dict):
+            probabilities, source, reason = _probability_from_dict(value)
+            if probabilities is not None:
+                return probabilities, f"{key}.{source}", None
+            if reason:
+                parse_errors.append(f"{key}: {reason}")
+
+    reason = "No probabilities key found in dict output."
+    if parse_errors:
+        reason = f"{reason} Parse errors: {'; '.join(parse_errors)}"
+    return None, None, reason
+
+
+def _probability_from_run_output(run_output: object) -> tuple[np.ndarray | None, str | None, str | None]:
+    if isinstance(run_output, dict):
+        return _probability_from_dict(run_output)
+
+    if isinstance(run_output, (list, tuple)):
+        if len(run_output) == 1:
+            probabilities, source, reason = _probability_from_run_output(run_output[0])
+            if probabilities is not None:
+                return probabilities, f"list[0].{source}", None
+            return None, None, reason
+        return None, None, f"Could not inspect probabilities in list output with {len(run_output)} entries."
+
+    if isinstance(run_output, (str, Path)):
+        output_path = Path(run_output)
+        if output_path.suffix == ".zarr" or output_path.is_dir():
+            return _probability_from_zarr(output_path)
+        return None, None, f"Unsupported probability path output from TIAToolbox: {output_path}"
+
+    return None, None, f"No probability extraction rule for output type {type(run_output).__name__}."
+
+
+def _probability_array_for_label_mask(
+    probabilities: np.ndarray,
+    label_mask: np.ndarray,
+) -> tuple[np.ndarray | None, str | None]:
+    array = np.asarray(probabilities)
+    array = np.squeeze(array)
+    if array.ndim != 3:
+        return None, f"Probability array must be 3D after squeeze, got shape {list(array.shape)}."
+
+    if array.shape[:2] == label_mask.shape:
+        return array.astype(np.float32, copy=False), None
+    if array.shape[1:] == label_mask.shape:
+        return np.moveaxis(array, 0, -1).astype(np.float32, copy=False), None
+    return (
+        None,
+        "Probability spatial shape does not match raw prediction mask: "
+        f"probabilities={list(array.shape)}, label_mask={list(label_mask.shape)}.",
+    )
+
+
+def build_probability_summary(
+    run_output: object,
+    label_mask: np.ndarray,
+    *,
+    output_dir: Path,
+    save_probabilities: bool = False,
+) -> dict[str, Any]:
+    """Summarize prediction probabilities if TIAToolbox exposes them."""
+    probabilities, source, reason = _probability_from_run_output(run_output)
+    if probabilities is None:
+        return {
+            "available": False,
+            "reason": reason or "Probabilities were not available in TIAToolbox output.",
+        }
+
+    probability_array, shape_reason = _probability_array_for_label_mask(
+        probabilities=probabilities,
+        label_mask=label_mask,
+    )
+    if probability_array is None:
+        return {
+            "available": False,
+            "source": source,
+            "reason": shape_reason,
+            "raw_probability_shape": list(np.asarray(probabilities).shape),
+        }
+
+    max_probability = np.max(probability_array, axis=-1)
+    mean_probability_by_predicted_class: dict[str, float] = {}
+    for class_id in sorted(int(value) for value in np.unique(label_mask)):
+        class_mask = label_mask == class_id
+        if np.any(class_mask):
+            mean_probability_by_predicted_class[str(class_id)] = float(
+                np.mean(max_probability[class_mask])
+            )
+
+    probability_summary: dict[str, Any] = {
+        "available": True,
+        "source": source,
+        "probability_shape": list(probability_array.shape),
+        "mean_max_probability": float(np.mean(max_probability)),
+        "median_max_probability": float(np.median(max_probability)),
+        "min_max_probability": float(np.min(max_probability)),
+        "max_max_probability": float(np.max(max_probability)),
+        "mean_probability_by_predicted_class": mean_probability_by_predicted_class,
+    }
+
+    if save_probabilities:
+        probability_path = output_dir / "prediction_probabilities.npz"
+        np.savez_compressed(probability_path, probabilities=probability_array)
+        probability_summary["saved_npz"] = str(probability_path)
+
+    return probability_summary
 
 
 def _prediction_from_dict(run_output: dict[Any, Any]) -> tuple[np.ndarray, str]:
@@ -661,6 +830,8 @@ def run_inference_smoke_test(
     clear_output: bool = False,
     strict_input_validation: bool = False,
     selection_metadata: dict[str, object] | None = None,
+    save_probabilities: bool = False,
+    save_visual_labels_npy: bool = False,
 ) -> tuple[dict[str, Any], Path]:
     """Run a TIAToolbox SemanticSegmentor smoke test and save visual outputs."""
     image_path = Path(image_path).expanduser().resolve()
@@ -683,6 +854,21 @@ def run_inference_smoke_test(
         selection_metadata=selection_metadata,
     )
     summary["strict_input_validation"] = strict_input_validation
+    summary["inference_config"] = {
+        "model_name": model_name,
+        "requested_device": requested_device,
+        "resolved_device": None,
+        "input_mode": input_mode,
+        "patch_mode": input_mode == "patch",
+        "batch_size": 1,
+        "num_workers": 0,
+        "return_probabilities": True,
+        "output_type": "dict" if input_mode == "patch" else "zarr",
+        "overlay_alpha": overlay_alpha,
+        "strict_input_validation": strict_input_validation,
+        "save_probabilities": save_probabilities,
+        "save_visual_labels_npy": save_visual_labels_npy,
+    }
 
     try:
         if clear_output:
@@ -718,6 +904,7 @@ def run_inference_smoke_test(
 
         resolved_device = resolve_torch_device(torch_module, requested_device)
         summary["resolved_device"] = resolved_device
+        summary["inference_config"]["resolved_device"] = resolved_device
 
         try:
             if input_mode == "patch":
@@ -741,6 +928,7 @@ def run_inference_smoke_test(
                 )
                 resolved_device = "cpu"
                 summary["resolved_device"] = resolved_device
+                summary["inference_config"]["resolved_device"] = resolved_device
                 if input_mode == "patch":
                     segmentor, run_output = _run_segmentor_patch(
                         model_name=model_name,
@@ -787,12 +975,18 @@ def run_inference_smoke_test(
             ioconfig=getattr(segmentor, "ioconfig", None),
             model_name=model_name,
         )
-        legend, class_pixel_counts = build_class_legend(
+        legend, class_pixel_counts, class_pixel_ratios = build_class_legend(
             label_mask=label_mask,
             model_name=model_name,
             class_names=class_names,
             mapping_source=mapping_source,
             mapping_warning=mapping_warning,
+        )
+        probability_summary = build_probability_summary(
+            run_output=run_output,
+            label_mask=label_mask,
+            output_dir=output_dir,
+            save_probabilities=save_probabilities,
         )
         legend_png_path = output_dir / "legend.png"
         overlay_with_legend_path = output_dir / "prediction_overlay_with_legend.png"
@@ -815,6 +1009,11 @@ def run_inference_smoke_test(
                 for class_id, class_name in sorted(TIATOOLBOX_BCSS_OUTPUT_CLASS_NAMES.items())
             }
         summary["class_pixel_counts"] = class_pixel_counts
+        summary["class_pixel_ratios"] = class_pixel_ratios
+        summary["class_count_source"] = "raw_prediction_mask"
+        summary["raw_prediction_total_pixels"] = int(label_mask.size)
+        summary["total_prediction_pixels"] = int(label_mask.size)
+        summary["probability_summary"] = probability_summary
         summary["legend_json"] = str(legend_path)
         summary["legend_png"] = str(legend_png_path)
 
@@ -826,8 +1025,22 @@ def run_inference_smoke_test(
             visual_mask = resize_label_mask(visual_mask, size=(image_width, image_height))
         summary["visualized_mask_shape"] = list(visual_mask.shape)
         summary["resized_for_visualization"] = list(label_mask.shape) != list(visual_mask.shape)
+        summary["visualized_prediction_total_pixels"] = int(visual_mask.size)
+
+        labels_raw_path = output_dir / "prediction_labels_raw.npy"
+        np.save(labels_raw_path, label_mask)
+        labels_visual_path: Path | None = None
+        if save_visual_labels_npy:
+            labels_visual_path = output_dir / "prediction_labels_visual.npy"
+            np.save(labels_visual_path, visual_mask)
+
+        raw_mask_rgb = colorize_label_mask(label_mask)
+        raw_mask_path = output_dir / "prediction_mask_raw.png"
+        Image.fromarray(raw_mask_rgb).save(raw_mask_path)
 
         mask_rgb = colorize_label_mask(visual_mask)
+        visual_mask_path = output_dir / "prediction_mask_visual.png"
+        Image.fromarray(mask_rgb).save(visual_mask_path)
         mask_path = output_dir / "prediction_mask.png"
         Image.fromarray(mask_rgb).save(mask_path)
 
@@ -847,7 +1060,18 @@ def run_inference_smoke_test(
         summary["status"] = "completed"
         summary["outputs"] = {
             "input_preview": str(input_preview_path),
+            "prediction_mask_raw": str(raw_mask_path),
+            "prediction_mask_visual": str(visual_mask_path),
             "prediction_mask": str(mask_path),
+            "prediction_mask_compatibility_note": (
+                "prediction_mask.png is retained for compatibility and matches "
+                "prediction_mask_visual.png."
+            ),
+            "prediction_labels_raw_npy": str(labels_raw_path),
+            "prediction_labels_visual_npy": (
+                str(labels_visual_path) if labels_visual_path is not None else None
+            ),
+            "prediction_probabilities_npz": probability_summary.get("saved_npz"),
             "prediction_overlay": str(overlay_path),
             "prediction_overlay_with_legend": str(overlay_with_legend_path),
             "legend_json": str(legend_path),

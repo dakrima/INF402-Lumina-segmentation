@@ -72,6 +72,16 @@ def parse_args() -> argparse.Namespace:
             "an incompatible patch shape, dtype, range, or channel count."
         ),
     )
+    parser.add_argument(
+        "--save-probabilities",
+        action="store_true",
+        help="Save probability arrays per patch when TIAToolbox exposes them. Disabled by default.",
+    )
+    parser.add_argument(
+        "--save-visual-labels-npy",
+        action="store_true",
+        help="Save visualization-resized label arrays per patch.",
+    )
     return parser.parse_args()
 
 
@@ -99,6 +109,8 @@ def main() -> int:
         limit_patches=args.limit_patches,
         overwrite=args.overwrite,
         strict_input_validation=args.strict_input_validation,
+        save_probabilities=args.save_probabilities,
+        save_visual_labels_npy=args.save_visual_labels_npy,
     )
 
     print("Selected patch segmentation")
@@ -111,6 +123,8 @@ def main() -> int:
     print(f"Overlay alpha: {args.overlay_alpha}")
     print(f"Limit patches: {args.limit_patches}")
     print(f"Strict input validation: {args.strict_input_validation}")
+    print(f"Save probabilities: {args.save_probabilities}")
+    print(f"Save visual labels npy: {args.save_visual_labels_npy}")
     print(f"Clinical warning: {CLINICAL_WARNING}")
 
     try:
@@ -135,6 +149,10 @@ def main() -> int:
     print(
         "Patches with resized visualization: "
         f"{summary.get('num_patches_with_resized_visualization', 0)}"
+    )
+    print(
+        "Patches with probability summary: "
+        f"{summary.get('num_patches_with_probability_summary', 0)}"
     )
     print(f"Input validation summary: {summary.get('input_validation_summary_json')}")
     print(f"Per-patch CSV: {summary['per_patch_segmentation_csv']}")

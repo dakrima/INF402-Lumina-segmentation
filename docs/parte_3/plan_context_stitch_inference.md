@@ -1,0 +1,63 @@
+# Plan para inferencia con contexto y stitching
+
+## 1. Objetivo
+
+Preparar una validacion inicial para la estrategia `context-stitch-2x2` sobre patches seleccionados. Esta etapa no integra el metodo al batch productivo, no cambia el modelo y no reemplaza la inferencia `single-window`.
+
+Advertencia obligatoria: Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation.
+
+## 2. Validacion inicial: geometria y contexto
+
+La primera etapa separa tres preguntas tecnicas:
+
+- Si la geometria 2x2 reconstruye correctamente una mascara de `1024x1024` desde cuatro salidas simuladas de `512x512`.
+- Si se puede leer desde la WSI original una region de contexto `1536x1536` alrededor de un patch seleccionado.
+- Si una prueba minima con modelo produce cuatro salidas `512x512` que pueden stitched en una mascara `1024x1024`.
+
+La prueba sintetica valida solamente geometria y convencion de ejes. No demuestra por si sola que la salida `512x512` del modelo corresponda a la zona central util del input `1024x1024`.
+
+## 3. Geometria propuesta
+
+Para `patch_input_shape=1024` y `patch_output_shape=512`, el margen tecnico es:
+
+```text
+margin = (1024 - 512) / 2 = 256
+context_size = 1024 + 2 * 256 = 1536
+```
+
+Las coordenadas WSI/PIL/OpenSlide usan `(x, y)`. Los arrays NumPy usan `[y, x]`.
+
+Ventanas:
+
+- `window_00`: input `y=0:1024, x=0:1024`, target `y=0:512, x=0:512`.
+- `window_01`: input `y=0:1024, x=512:1536`, target `y=0:512, x=512:1024`.
+- `window_10`: input `y=512:1536, x=0:1024`, target `y=512:1024, x=0:512`.
+- `window_11`: input `y=512:1536, x=512:1536`, target `y=512:1024, x=512:1024`.
+
+## 4. Lectura desde WSI
+
+El metodo debe usar `source_wsi_path` o `wsi_path`, junto con `x_level0`, `y_level0` y `patch_size`. No debe depender solo del PNG seleccionado, porque los bordes del patch objetivo requieren contexto externo.
+
+Si el contexto solicitado cae fuera de la WSI, la etapa inicial usa padding blanco (`RGB 255,255,255`) y lo registra en el manifest:
+
+- `context_padding_used`
+- `padding_left`
+- `padding_right`
+- `padding_top`
+- `padding_bottom`
+- `padding_mode`
+
+## 5. Prueba minima con modelo
+
+El probe opcional `--run-alignment-probe` corre `fcn_resnet50_unet-bcss` sobre las cuatro ventanas `1024x1024`, carga cada `prediction_labels_raw.npy`, verifica salidas `512x512` y genera:
+
+- `stitched_prediction_1024.npy`
+- `stitched_prediction_1024.png`
+- `stitched_overlay_1024.png`
+- `alignment_probe_manifest.json`
+
+El manifest debe mantener `hypothesis_confirmed = "visual_review_required"`. Esto indica que la geometria y los shapes son consistentes, pero la hipotesis del centro util requiere revision visual o comparacion formal contra inferencia WSI/region de TIAToolbox.
+
+## 6. Limites
+
+Esta etapa no implementa QC avanzado, no agrega agregacion WSI final, no calcula RCB, no valida clinicamente y no reemplaza revision experta. Solo prepara trazabilidad tecnica para decidir si `context-stitch-2x2` merece integrarse despues como estrategia opcional.

@@ -84,3 +84,42 @@ Este probe inspecciona la configuracion y el codigo instalado de TIAToolbox para
 - `WSIPatchDataset` y `SemanticSegmentor`, que transportan `output_locs` separados de las coordenadas de entrada.
 
 La comparacion directa contra una mascara stitched puede ejecutarse como chequeo secundario, pero no debe tratarse como prueba definitiva. El resultado esperado del probe debe clasificarse explicitamente como `supported`, `contradicted` o `inconclusive`, y siempre bajo la advertencia: Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation.
+
+## 8. Comparacion 2x2 sin overlap vs overlap-aware
+
+La siguiente etapa experimental compara dos formas de reconstruir una mascara tecnica `1024x1024` sobre el mismo patch objetivo:
+
+- `context-stitch-2x2` sin overlap: cuatro ventanas `1024x1024`, cuatro salidas centrales `512x512` y stitching directo por cuadrantes.
+- `overlap-aware`: ventanas definidas con la logica de coordenadas de TIAToolbox y `stride_shape=(450, 450)`, acumulando probabilidades en el canvas objetivo antes de aplicar `argmax`.
+
+Comando base:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE \
+NUMBA_CACHE_DIR=/tmp/numba_cache \
+MPLCONFIGDIR=/tmp/mpl_config \
+/Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python \
+  scripts/12_compare_context_stitch_strategies.py \
+  --selection-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --patch-indices 0,1,2 \
+  --output-dir outputs/context_stitch_comparison \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --overlap-stride 450 \
+  --blend-mode uniform \
+  --run-no-overlap \
+  --run-overlap-aware \
+  --overwrite
+```
+
+La mezcla overlap-aware usa probabilidades, no IDs de clase interpolados. El modo principal es `uniform`; el modo `feathered` queda disponible como variante tecnica con pesos suaves y epsilon minimo para evitar pixeles sin cobertura.
+
+Metricas registradas:
+
+- rendimiento: cantidad de ventanas, runtime total y runtime promedio por ventana;
+- distribucion de clases predichas por estrategia;
+- acuerdo entre estrategias: pixel agreement, disagreement ratio, IoU entre estrategias y diferencias de ratios de clase;
+- continuidad tecnica en uniones: discontinuidad de labels, probabilidades y confianza;
+- cobertura overlap-aware: conteo de cobertura, pesos acumulados y pixeles sin cobertura.
+
+Estas metricas comparan estrategias de inferencia, no exactitud contra ground truth. No permiten afirmar que una estrategia diagnostica mejor, estima RCB ni mejora desempeno clinico. La recomendacion final debe limitarse a `prefer_no_overlap`, `prefer_overlap_aware`, `technically_similar` o `inconclusive`, con razonamiento tecnico y sin claims clinicos.

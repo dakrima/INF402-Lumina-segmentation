@@ -64,6 +64,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate output directory. Only safe repo output paths are cleared.",
     )
+    parser.add_argument(
+        "--strict-input-validation",
+        action="store_true",
+        help=(
+            "Fail each patch before inference if technical input validation detects "
+            "an incompatible patch shape, dtype, range, or channel count."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -90,6 +98,7 @@ def main() -> int:
         overlay_alpha=args.overlay_alpha,
         limit_patches=args.limit_patches,
         overwrite=args.overwrite,
+        strict_input_validation=args.strict_input_validation,
     )
 
     print("Selected patch segmentation")
@@ -101,6 +110,7 @@ def main() -> int:
     print(f"Input mode: {args.input_mode}")
     print(f"Overlay alpha: {args.overlay_alpha}")
     print(f"Limit patches: {args.limit_patches}")
+    print(f"Strict input validation: {args.strict_input_validation}")
     print(f"Clinical warning: {CLINICAL_WARNING}")
 
     try:
@@ -126,6 +136,7 @@ def main() -> int:
         "Patches with resized visualization: "
         f"{summary.get('num_patches_with_resized_visualization', 0)}"
     )
+    print(f"Input validation summary: {summary.get('input_validation_summary_json')}")
     print(f"Per-patch CSV: {summary['per_patch_segmentation_csv']}")
     print(f"Summary JSON: {summary['output_dir']}/inference_summary.json")
     print(f"Output dir: {summary['output_dir']}")

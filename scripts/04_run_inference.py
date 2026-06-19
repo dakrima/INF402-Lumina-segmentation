@@ -52,6 +52,14 @@ def parse_args() -> argparse.Namespace:
         default=0.45,
         help="Opacity for the technical prediction overlay.",
     )
+    parser.add_argument(
+        "--strict-input-validation",
+        action="store_true",
+        help=(
+            "Fail before inference if technical input validation detects an "
+            "incompatible patch shape, dtype, range, or channel count."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -65,6 +73,7 @@ def main() -> int:
     print(f"Requested device: {args.device}")
     print(f"Input mode: {args.input_mode}")
     print(f"Output dir: {args.output_dir}")
+    print(f"Strict input validation: {args.strict_input_validation}")
     print("Clinical warning: technical smoke test only; not diagnosis, not RCB.")
 
     summary, summary_path = run_inference_smoke_test(
@@ -76,6 +85,7 @@ def main() -> int:
         input_mode=args.input_mode,
         overlay_alpha=args.overlay_alpha,
         clear_output=args.clear_output,
+        strict_input_validation=args.strict_input_validation,
     )
 
     print(f"Status: {summary['status']}")
@@ -84,8 +94,11 @@ def main() -> int:
     print(f"TIAToolbox version: {summary.get('tiatoolbox_version')}")
     print(f"Torch version: {summary.get('torch_version')}")
     print(f"Prediction shape: {summary.get('prediction_shape')}")
+    print(f"Raw prediction shape: {summary.get('raw_prediction_shape')}")
     print(f"Visualized mask shape: {summary.get('visualized_mask_shape')}")
+    print(f"Resized for visualization: {summary.get('resized_for_visualization')}")
     print(f"Unique prediction values: {summary.get('unique_prediction_values')}")
+    print(f"Input validation: {summary.get('input_validation', {}).get('status')}")
     print(f"Class mapping source: {summary.get('class_mapping_source')}")
     print(f"Legend JSON: {summary.get('legend_json')}")
     print(f"Legend PNG: {summary.get('legend_png')}")

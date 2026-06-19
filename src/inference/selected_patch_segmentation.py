@@ -11,6 +11,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.inference.input_validation import (
+    EXPECTED_INPUT_HEIGHT,
+    EXPECTED_INPUT_WIDTH,
+    EXPECTED_MODEL_MPP,
+    MPP_TOLERANCE,
+    build_selection_metadata_for_patch,
+)
+
 
 CLINICAL_WARNING = (
     "Technical segmentation over selected patches only. Not for diagnosis, "
@@ -55,6 +63,46 @@ PER_PATCH_SEGMENTATION_FIELDS = [
     "resized_for_visualization",
     "num_patch_warnings",
     "patch_warnings",
+    "selector",
+    "wsi_path",
+    "stride",
+    "tiatoolbox_index",
+    "candidate_pool",
+    "tissue_mask_method",
+    "mpp_x",
+    "mpp_y",
+    "objective_power",
+    "source_selection_dir",
+    "source_selected_metadata_csv",
+    "source_selection_summary_json",
+    "selection_metadata_warnings",
+    "input_validation_status",
+    "file_exists",
+    "pil_opened",
+    "original_mode",
+    "converted_to_rgb",
+    "input_width",
+    "input_height",
+    "expected_input_width",
+    "expected_input_height",
+    "input_shape_matches_model",
+    "input_dtype",
+    "input_min",
+    "input_max",
+    "input_mean",
+    "input_std",
+    "num_channels",
+    "is_uint8",
+    "range_looks_valid",
+    "expected_model_mpp",
+    "input_mpp_x",
+    "input_mpp_y",
+    "mpp_x_abs_diff",
+    "mpp_y_abs_diff",
+    "mpp_tolerance",
+    "mpp_available",
+    "mpp_within_tolerance",
+    "input_validation_warnings",
 ]
 
 
@@ -71,6 +119,7 @@ class SelectedPatchSegmentationConfig:
     overlay_alpha: float = 0.45
     limit_patches: int | None = None
     overwrite: bool = False
+    strict_input_validation: bool = False
 
 
 def _resolve_path(path: Path, root_dir: Path) -> Path:
@@ -175,6 +224,14 @@ def _json_cell(value: object) -> str:
     return json.dumps(value, sort_keys=True)
 
 
+def _bool_cell(value: object) -> str:
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    return ""
+
+
 def _shape_from_image_size(summary: dict[str, Any]) -> list[int] | None:
     image_height = summary.get("image_height")
     image_width = summary.get("image_width")
@@ -195,6 +252,65 @@ def _summary_was_resized_for_visualization(summary: dict[str, Any]) -> bool:
     return any("resized with nearest neighbor" in str(warning).lower() for warning in warnings)
 
 
+def _selection_metadata_cells(selection_metadata: dict[str, object] | None) -> dict[str, object]:
+    selection_metadata = selection_metadata or {}
+    return {
+        "selector": selection_metadata.get("selector", ""),
+        "wsi_path": selection_metadata.get("wsi_path", ""),
+        "stride": selection_metadata.get("stride", ""),
+        "tiatoolbox_index": selection_metadata.get("tiatoolbox_index", ""),
+        "candidate_pool": selection_metadata.get("candidate_pool", ""),
+        "tissue_mask_method": selection_metadata.get("tissue_mask_method", ""),
+        "mpp_x": selection_metadata.get("mpp_x", ""),
+        "mpp_y": selection_metadata.get("mpp_y", ""),
+        "objective_power": selection_metadata.get("objective_power", ""),
+        "source_selection_dir": selection_metadata.get("source_selection_dir", ""),
+        "source_selected_metadata_csv": selection_metadata.get("source_selected_metadata_csv", ""),
+        "source_selection_summary_json": selection_metadata.get("source_selection_summary_json", ""),
+        "selection_metadata_warnings": _json_cell(
+            selection_metadata.get("metadata_warnings", [])
+        ),
+    }
+
+
+def _input_validation_cells(input_validation: dict[str, object] | None) -> dict[str, object]:
+    input_validation = input_validation or {}
+    mpp_validation = input_validation.get("mpp_validation")
+    if not isinstance(mpp_validation, dict):
+        mpp_validation = {}
+    return {
+        "input_validation_status": input_validation.get("status", ""),
+        "file_exists": _bool_cell(input_validation.get("file_exists")),
+        "pil_opened": _bool_cell(input_validation.get("pil_opened")),
+        "original_mode": input_validation.get("original_mode", ""),
+        "converted_to_rgb": _bool_cell(input_validation.get("converted_to_rgb")),
+        "input_width": input_validation.get("input_width", ""),
+        "input_height": input_validation.get("input_height", ""),
+        "expected_input_width": input_validation.get("expected_input_width", ""),
+        "expected_input_height": input_validation.get("expected_input_height", ""),
+        "input_shape_matches_model": _bool_cell(
+            input_validation.get("input_shape_matches_model")
+        ),
+        "input_dtype": input_validation.get("input_dtype", ""),
+        "input_min": input_validation.get("input_min", ""),
+        "input_max": input_validation.get("input_max", ""),
+        "input_mean": input_validation.get("input_mean", ""),
+        "input_std": input_validation.get("input_std", ""),
+        "num_channels": input_validation.get("num_channels", ""),
+        "is_uint8": _bool_cell(input_validation.get("is_uint8")),
+        "range_looks_valid": _bool_cell(input_validation.get("range_looks_valid")),
+        "expected_model_mpp": mpp_validation.get("expected_model_mpp", ""),
+        "input_mpp_x": mpp_validation.get("input_mpp_x", ""),
+        "input_mpp_y": mpp_validation.get("input_mpp_y", ""),
+        "mpp_x_abs_diff": mpp_validation.get("mpp_x_abs_diff", ""),
+        "mpp_y_abs_diff": mpp_validation.get("mpp_y_abs_diff", ""),
+        "mpp_tolerance": mpp_validation.get("mpp_tolerance", ""),
+        "mpp_available": _bool_cell(mpp_validation.get("mpp_available")),
+        "mpp_within_tolerance": _bool_cell(mpp_validation.get("mpp_within_tolerance")),
+        "input_validation_warnings": _json_cell(input_validation.get("warnings", [])),
+    }
+
+
 def _patch_id_for_row(row: dict[str, str]) -> str:
     patch_id = row.get("patch_id", "").strip()
     if patch_id:
@@ -209,6 +325,7 @@ def _empty_result_row(
     patch_id: str,
     status: str,
     error: str = "",
+    selection_metadata: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "patch_id": patch_id,
@@ -237,7 +354,7 @@ def _empty_result_row(
         "resized_for_visualization": "false",
         "num_patch_warnings": 0,
         "patch_warnings": "[]",
-    }
+    } | _selection_metadata_cells(selection_metadata) | _input_validation_cells(None)
 
 
 def _copy_completed_outputs(
@@ -288,6 +405,8 @@ def _result_row_from_summary(
 ) -> dict[str, object]:
     error = patch_summary.get("error") or ""
     patch_warnings = patch_summary.get("warnings") or []
+    selection_metadata = patch_summary.get("selection_metadata")
+    input_validation = patch_summary.get("input_validation")
     return {
         "patch_id": patch_id,
         "filename": source_row.get("filename", ""),
@@ -320,7 +439,7 @@ def _result_row_from_summary(
         ),
         "num_patch_warnings": len(patch_warnings),
         "patch_warnings": _json_cell(patch_warnings),
-    }
+    } | _selection_metadata_cells(selection_metadata) | _input_validation_cells(input_validation)
 
 
 def _method_config_payload(
@@ -335,6 +454,7 @@ def _method_config_payload(
         "overlay_alpha": config.overlay_alpha,
         "input_selection_dir": str(input_selection_dir),
         "limit_patches": config.limit_patches,
+        "strict_input_validation": config.strict_input_validation,
         "created_at": _utc_now_iso(),
         "clinical_warning": CLINICAL_WARNING,
     }
@@ -349,6 +469,53 @@ def _selection_method(selection_summary: dict[str, Any], selected_rows: list[dic
         if selection_method:
             return selection_method
     return ""
+
+
+def _is_true_cell(value: object) -> bool:
+    return str(value).strip().lower() in {"true", "1", "yes"}
+
+
+def _summarize_input_validation(result_rows: list[dict[str, object]]) -> dict[str, object]:
+    completed_rows = [row for row in result_rows if row.get("input_validation_status")]
+    mpp_available_rows = [
+        row for row in completed_rows if _is_true_cell(row.get("mpp_available"))
+    ]
+    return {
+        "status": "completed",
+        "expected_input_width": EXPECTED_INPUT_WIDTH,
+        "expected_input_height": EXPECTED_INPUT_HEIGHT,
+        "expected_model_mpp": EXPECTED_MODEL_MPP,
+        "mpp_tolerance": MPP_TOLERANCE,
+        "num_rows_with_input_validation": len(completed_rows),
+        "num_rgb_converted": sum(
+            _is_true_cell(row.get("converted_to_rgb")) for row in completed_rows
+        ),
+        "num_input_shape_matches": sum(
+            _is_true_cell(row.get("input_shape_matches_model")) for row in completed_rows
+        ),
+        "num_input_shape_mismatches": sum(
+            row.get("input_shape_matches_model") == "false" for row in completed_rows
+        ),
+        "num_uint8_inputs": sum(
+            _is_true_cell(row.get("is_uint8")) for row in completed_rows
+        ),
+        "num_valid_range_inputs": sum(
+            _is_true_cell(row.get("range_looks_valid")) for row in completed_rows
+        ),
+        "num_mpp_available": len(mpp_available_rows),
+        "num_mpp_unavailable": sum(
+            row.get("mpp_available") == "false" for row in completed_rows
+        ),
+        "num_mpp_within_tolerance": sum(
+            _is_true_cell(row.get("mpp_within_tolerance")) for row in completed_rows
+        ),
+        "num_mpp_outside_tolerance": sum(
+            row.get("mpp_available") == "true"
+            and row.get("mpp_within_tolerance") == "false"
+            for row in completed_rows
+        ),
+        "clinical_warning": CLINICAL_WARNING,
+    }
 
 
 def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[str, Any]:
@@ -372,6 +539,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
     per_patch_csv_path = output_dir / "per_patch_segmentation.csv"
     global_summary_path = output_dir / "inference_summary.json"
     run_method_config_path = output_dir / "method_config.json"
+    input_validation_summary_path = output_dir / "input_validation_summary.json"
 
     selected_rows = _read_csv(selected_metadata_path)
     selection_summary = _read_json(selection_summary_path)
@@ -394,11 +562,32 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
     unique_patch_warnings: set[str] = set()
 
     for index, row in enumerate(selected_rows, start=1):
+        selection_metadata = build_selection_metadata_for_patch(
+            selected_row=row,
+            selection_summary=selection_summary,
+            input_selection_dir=input_selection_dir,
+            selected_metadata_path=selected_metadata_path,
+            selection_summary_path=selection_summary_path,
+        )
+        metadata_warnings = [
+            str(warning) for warning in selection_metadata.get("metadata_warnings", [])
+        ]
+        for warning in metadata_warnings:
+            warnings.append(f"Row {index} metadata warning: {warning}")
+
         filename = row.get("filename", "").strip()
         if not filename:
             skipped += 1
             warnings.append(f"Row {index} skipped: missing filename.")
-            result_rows.append(_empty_result_row(row, patch_id="", status="skipped", error="missing filename"))
+            result_rows.append(
+                _empty_result_row(
+                    row,
+                    patch_id="",
+                    status="skipped",
+                    error="missing filename",
+                    selection_metadata=selection_metadata,
+                )
+            )
             continue
 
         patch_path = selected_dir / filename
@@ -412,6 +601,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                     patch_id=patch_id,
                     status="skipped",
                     error=f"selected patch file not found: {patch_path}",
+                    selection_metadata=selection_metadata,
                 )
             )
             continue
@@ -434,6 +624,8 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                 input_mode=config.input_mode,
                 overlay_alpha=config.overlay_alpha,
                 clear_output=True,
+                strict_input_validation=config.strict_input_validation,
+                selection_metadata=selection_metadata,
             )
             patch_warnings = [str(warning) for warning in patch_summary.get("warnings") or []]
             if patch_warnings:
@@ -472,12 +664,15 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                     patch_id=patch_id,
                     status="failed",
                     error=str(exc),
+                    selection_metadata=selection_metadata,
                 )
                 | {"patch_inference_summary_path": str(patch_summary_path)}
             )
             warnings.append(f"Patch {patch_id} failed: {exc}")
 
     _write_csv(result_rows, per_patch_csv_path, PER_PATCH_SEGMENTATION_FIELDS)
+    input_validation_summary = _summarize_input_validation(result_rows)
+    _write_json(input_validation_summary, input_validation_summary_path)
 
     if num_patch_warnings:
         warnings.append(
@@ -509,7 +704,10 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         "num_patches_with_warnings": num_patches_with_warnings,
         "unique_patch_warnings": sorted(unique_patch_warnings),
         "num_patches_with_resized_visualization": num_patches_with_resized_visualization,
+        "strict_input_validation": config.strict_input_validation,
         "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
+        "input_validation_summary": input_validation_summary,
+        "input_validation_summary_json": str(input_validation_summary_path),
         "runtime_seconds": round(time.perf_counter() - start_time, 3),
         "selection_summary_path": str(selection_summary_path),
         "selection_method_config_path": str(method_config_path),

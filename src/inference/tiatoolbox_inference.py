@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from src.inference.input_validation import validate_patch_input
 from src.models.tiatoolbox_bcss import DEFAULT_MODEL_NAME, resolve_torch_device
 from src.visualization.segmentation_overlay import (
     append_legend_to_image,
@@ -144,6 +145,7 @@ def _summary_base(
     requested_device: str,
     input_mode: str,
     output_dir: Path,
+    selection_metadata: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     patch_mode = input_mode == "patch"
     return {
@@ -161,8 +163,12 @@ def _summary_base(
         "torch_version": None,
         "model_class": None,
         "ioconfig_class": None,
+        "input_validation": {},
+        "selection_metadata": selection_metadata or {},
         "prediction_shape": None,
+        "raw_prediction_shape": None,
         "visualized_mask_shape": None,
+        "resized_for_visualization": False,
         "num_classes_or_labels": None,
         "unique_prediction_values": [],
         "class_mapping_source": "unconfirmed",
@@ -653,6 +659,8 @@ def run_inference_smoke_test(
     input_mode: str = "patch",
     overlay_alpha: float = 0.45,
     clear_output: bool = False,
+    strict_input_validation: bool = False,
+    selection_metadata: dict[str, object] | None = None,
 ) -> tuple[dict[str, Any], Path]:
     """Run a TIAToolbox SemanticSegmentor smoke test and save visual outputs."""
     image_path = Path(image_path).expanduser().resolve()
@@ -672,17 +680,26 @@ def run_inference_smoke_test(
         requested_device=requested_device,
         input_mode=input_mode,
         output_dir=output_dir,
+        selection_metadata=selection_metadata,
     )
+    summary["strict_input_validation"] = strict_input_validation
 
     try:
-        if not image_path.exists():
-            raise FileNotFoundError(f"Image path does not exist: {image_path}")
         if clear_output:
             clear_output_dir_safely(output_dir=output_dir, root_dir=root_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        with Image.open(image_path) as image:
-            rgb_image = image.convert("RGB")
+        rgb_image, input_validation = validate_patch_input(
+            image_path=image_path,
+            selection_metadata=selection_metadata,
+        )
+        summary["input_validation"] = input_validation
+        summary["warnings"].extend(str(warning) for warning in input_validation["warnings"])
+        if strict_input_validation and input_validation["strict_validation_failed"]:
+            raise ValueError(
+                "Strict input validation failed; see input_validation in inference_summary.json."
+            )
+
         image_width, image_height = rgb_image.size
         patch_array = np.array(rgb_image, dtype=np.uint8, copy=True)
         patch_batch = np.expand_dims(patch_array, axis=0)
@@ -759,6 +776,7 @@ def run_inference_smoke_test(
         label_mask, prediction_source = _prediction_from_run_output(run_output)
         summary["prediction_source"] = prediction_source
         summary["prediction_shape"] = list(label_mask.shape)
+        summary["raw_prediction_shape"] = list(label_mask.shape)
 
         unique_values = np.unique(label_mask)
         summary["unique_prediction_values"] = [int(value) for value in unique_values[:100]]
@@ -807,6 +825,7 @@ def run_inference_smoke_test(
             )
             visual_mask = resize_label_mask(visual_mask, size=(image_width, image_height))
         summary["visualized_mask_shape"] = list(visual_mask.shape)
+        summary["resized_for_visualization"] = list(label_mask.shape) != list(visual_mask.shape)
 
         mask_rgb = colorize_label_mask(visual_mask)
         mask_path = output_dir / "prediction_mask.png"

@@ -396,6 +396,8 @@ python scripts/08_segment_selected_patches.py \
 
 La salida incluye `per_patch/`, `masks/`, `overlays/`, `overlays_with_legend/`, `input_previews/`, `per_patch_segmentation.csv`, `inference_summary.json` y `method_config.json`. La máscara cruda del modelo puede tener menor resolución que el patch original; para el overlay se reescala con vecino más cercano para preservar etiquetas discretas de clase. Por eso, `class_pixel_counts` corresponde a la resolución cruda de predicción, no necesariamente al tamaño visual del overlay. Es segmentación técnica sobre patches seleccionados: no diagnostica, no calcula RCB, no reemplaza al patólogo y no constituye validación clínica.
 
+El default sigue siendo `--inference-strategy single-window`. Como alternativa explicita, `--inference-strategy context-stitch-2x2` lee contexto desde la WSI original, corre cuatro ventanas `1024x1024`, stitcha probabilidades centrales `512x512` y genera una mascara tecnica `1024x1024` por patch. Esta estrategia requiere metadata WSI completa y `patch_size=1024`; no agrega overlap-aware ni agregacion final por WSI.
+
 ## Etapa 5.5 - comparación de segmentación baseline vs v4.1
 
 Una vez segmentados los patches seleccionados por cada método, se puede comparar técnicamente la distribución de clases predichas, warnings, tamaños de máscara y métricas operativas sin volver a ejecutar selección ni inferencia:

@@ -123,3 +123,89 @@ Metricas registradas:
 - cobertura overlap-aware: conteo de cobertura, pesos acumulados y pixeles sin cobertura.
 
 Estas metricas comparan estrategias de inferencia, no exactitud contra ground truth. No permiten afirmar que una estrategia diagnostica mejor, estima RCB ni mejora desempeno clinico. La recomendacion final debe limitarse a `prefer_no_overlap`, `prefer_overlap_aware`, `technically_similar` o `inconclusive`, con razonamiento tecnico y sin claims clinicos.
+
+## 9. Integracion batch de context-stitch-2x2
+
+Con la evidencia de ubicacion central del output y la comparacion tecnica `no-overlap` vs `overlap-aware`, la estrategia integrada al batch es `context-stitch-2x2` sin overlap. La decision se basa en que, sobre los tres patches de prueba, `overlap-aware` produjo resultados tecnicamente similares pero con mayor costo de ejecucion en CPU y sin reduccion consistente de discontinuidades.
+
+La integracion se activa de forma explicita en `scripts/08_segment_selected_patches.py`:
+
+```bash
+--inference-strategy context-stitch-2x2
+```
+
+El default se mantiene como:
+
+```bash
+--inference-strategy single-window
+```
+
+La estrategia batch usa:
+
+- WSI original desde `source_wsi_path` o `wsi_path`.
+- `x_level0`, `y_level0` y `patch_size=1024` desde `selected_metadata.csv`.
+- contexto `1536x1536` con margen `256`.
+- cuatro ventanas `1024x1024`.
+- cuatro outputs centrales `512x512`.
+- stitching de probabilidades y `argmax` final para producir una mascara `1024x1024`.
+
+El modelo se carga una vez por corrida batch y se reutiliza para todas las ventanas y patches. Las WSI se abren mediante un cache simple que reutiliza el handle cuando los patches consecutivos pertenecen al mismo archivo y lo cierra al terminar.
+
+Outputs por patch:
+
+- `prediction_labels_stitched_1024.npy`
+- `prediction_mask_stitched_1024.png`
+- `prediction_overlay_stitched_1024.png`
+- `stitching_manifest.json`
+- `inference_summary.json`
+- opcional: `prediction_probabilities_stitched_1024.npz`
+- opcional con `--save-context-artifacts`: `context_preview.png` y `window_*_input.png`
+
+Outputs batch consolidados:
+
+- `masks_stitched/`
+- `labels_stitched/`
+- `overlays_stitched/`
+- `stitching_manifests/`
+- `probabilities_stitched/` si se usa `--save-probabilities`
+
+Comando limitado de prueba:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE \
+NUMBA_CACHE_DIR=/tmp/numba_cache \
+MPLCONFIGDIR=/tmp/mpl_config \
+/Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python \
+  scripts/08_segment_selected_patches.py \
+  --input-selection-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --output-dir outputs/segmentation/context_stitch_2x2_smoke_patch3 \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --inference-strategy context-stitch-2x2 \
+  --strict-input-validation \
+  --limit-patches 3 \
+  --overwrite
+```
+
+Comando futuro para todos los patches de una seleccion compatible:
+
+```bash
+KMP_DUPLICATE_LIB_OK=TRUE \
+NUMBA_CACHE_DIR=/tmp/numba_cache \
+MPLCONFIGDIR=/tmp/mpl_config \
+/Users/davidkripper/miniforge3/envs/inf402-lumina-seg/bin/python \
+  scripts/08_segment_selected_patches.py \
+  --input-selection-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --output-dir outputs/segmentation/v4_1_tcga_a2_a3xs_context_stitch_2x2 \
+  --model-name fcn_resnet50_unet-bcss \
+  --device cpu \
+  --input-mode patch \
+  --inference-strategy context-stitch-2x2 \
+  --strict-input-validation \
+  --overwrite
+```
+
+Este comando futuro no debe ejecutarse hasta decidir procesar todos los patches. La ausencia de `--limit-patches` significa procesar todos los patches validos del `selected_metadata.csv`.
+
+Limitaciones: no hay ground truth en esta etapa, no se calcula Dice/IoU contra verdad real, no se estima RCB, no se realiza agregacion final por WSI y no hay validacion clinica. Las salidas son mascaras y overlays tecnicos revisables.

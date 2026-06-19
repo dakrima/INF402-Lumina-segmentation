@@ -48,6 +48,15 @@ def parse_args() -> argparse.Namespace:
         help="Use patch for selected PNG patches, or wsi only for WSI-like inputs.",
     )
     parser.add_argument(
+        "--inference-strategy",
+        choices=["single-window", "context-stitch-2x2"],
+        default="single-window",
+        help=(
+            "Inference strategy. single-window preserves the existing behavior; "
+            "context-stitch-2x2 reads WSI context and stitches four central outputs."
+        ),
+    )
+    parser.add_argument(
         "--overlay-alpha",
         type=float,
         default=0.45,
@@ -78,6 +87,14 @@ def parse_args() -> argparse.Namespace:
         help="Save probability arrays per patch when TIAToolbox exposes them. Disabled by default.",
     )
     parser.add_argument(
+        "--save-context-artifacts",
+        action="store_true",
+        help=(
+            "For context-stitch-2x2, save context_preview.png and the four 1024x1024 "
+            "input windows. Disabled by default to limit storage."
+        ),
+    )
+    parser.add_argument(
         "--save-visual-labels-npy",
         action="store_true",
         help="Save visualization-resized label arrays per patch.",
@@ -105,11 +122,13 @@ def main() -> int:
         model_name=args.model_name,
         requested_device=args.device,
         input_mode=args.input_mode,
+        inference_strategy=args.inference_strategy,
         overlay_alpha=args.overlay_alpha,
         limit_patches=args.limit_patches,
         overwrite=args.overwrite,
         strict_input_validation=args.strict_input_validation,
         save_probabilities=args.save_probabilities,
+        save_context_artifacts=args.save_context_artifacts,
         save_visual_labels_npy=args.save_visual_labels_npy,
     )
 
@@ -120,10 +139,12 @@ def main() -> int:
     print(f"Model name: {args.model_name}")
     print(f"Requested device: {args.device}")
     print(f"Input mode: {args.input_mode}")
+    print(f"Inference strategy: {args.inference_strategy}")
     print(f"Overlay alpha: {args.overlay_alpha}")
     print(f"Limit patches: {args.limit_patches}")
     print(f"Strict input validation: {args.strict_input_validation}")
     print(f"Save probabilities: {args.save_probabilities}")
+    print(f"Save context artifacts: {args.save_context_artifacts}")
     print(f"Save visual labels npy: {args.save_visual_labels_npy}")
     print(f"Clinical warning: {CLINICAL_WARNING}")
 
@@ -140,6 +161,7 @@ def main() -> int:
     print(f"Status: {summary['status']}")
     print(f"Selector: {summary.get('selector')}")
     print(f"Selection method: {summary.get('selection_method')}")
+    print(f"Inference strategy: {summary.get('inference_strategy')}")
     print(f"Metadata rows: {summary['num_metadata_rows']}")
     print(f"Patches attempted: {summary['num_patches_attempted']}")
     print(f"Patches completed: {summary['num_patches_completed']}")
@@ -154,6 +176,8 @@ def main() -> int:
         "Patches with probability summary: "
         f"{summary.get('num_patches_with_probability_summary', 0)}"
     )
+    print(f"Windows inferred: {summary.get('num_windows_inferred', 0)}")
+    print(f"Patches with context padding: {summary.get('num_patches_with_padding', 0)}")
     print(f"Input validation summary: {summary.get('input_validation_summary_json')}")
     print(f"Per-patch CSV: {summary['per_patch_segmentation_csv']}")
     print(f"Summary JSON: {summary['output_dir']}/inference_summary.json")

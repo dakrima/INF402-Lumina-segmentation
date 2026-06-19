@@ -34,6 +34,7 @@ REQUIRED_SELECTION_FILES = [
     "method_config.json",
 ]
 REQUIRED_SELECTION_DIRS = ["selected"]
+INFERENCE_STRATEGIES = {"single-window", "context-stitch-2x2"}
 PER_PATCH_SEGMENTATION_FIELDS = [
     "patch_id",
     "filename",
@@ -43,6 +44,20 @@ PER_PATCH_SEGMENTATION_FIELDS = [
     "patch_size",
     "selection_method",
     "source_wsi_path",
+    "inference_strategy",
+    "num_inference_windows",
+    "context_margin",
+    "context_shape",
+    "window_prediction_shape",
+    "stitched_prediction_shape",
+    "runtime_seconds",
+    "mean_runtime_per_window",
+    "context_padding_used",
+    "padding_left",
+    "padding_right",
+    "padding_top",
+    "padding_bottom",
+    "padding_mode",
     "status",
     "error",
     "resolved_device",
@@ -61,6 +76,11 @@ PER_PATCH_SEGMENTATION_FIELDS = [
     "min_max_probability",
     "max_max_probability",
     "mask_path",
+    "prediction_mask_stitched_path",
+    "prediction_labels_stitched_npy_path",
+    "prediction_overlay_stitched_path",
+    "prediction_probabilities_stitched_npz_path",
+    "stitching_manifest_path",
     "prediction_mask_raw_path",
     "prediction_mask_visual_path",
     "prediction_labels_raw_npy_path",
@@ -128,11 +148,13 @@ class SelectedPatchSegmentationConfig:
     model_name: str
     requested_device: str = "auto"
     input_mode: str = "patch"
+    inference_strategy: str = "single-window"
     overlay_alpha: float = 0.45
     limit_patches: int | None = None
     overwrite: bool = False
     strict_input_validation: bool = False
     save_probabilities: bool = False
+    save_context_artifacts: bool = False
     save_visual_labels_npy: bool = False
 
 
@@ -189,6 +211,11 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
         output_dir / "overlays",
         output_dir / "overlays_with_legend",
         output_dir / "input_previews",
+        output_dir / "masks_stitched",
+        output_dir / "labels_stitched",
+        output_dir / "overlays_stitched",
+        output_dir / "stitching_manifests",
+        output_dir / "probabilities_stitched",
         output_dir / "per_patch",
     ]:
         child_dir.mkdir(parents=True, exist_ok=True)
@@ -354,6 +381,20 @@ def _empty_result_row(
         "patch_size": source_row.get("patch_size", ""),
         "selection_method": source_row.get("selection_method", ""),
         "source_wsi_path": source_row.get("source_wsi_path", ""),
+        "inference_strategy": "",
+        "num_inference_windows": "",
+        "context_margin": "",
+        "context_shape": "",
+        "window_prediction_shape": "",
+        "stitched_prediction_shape": "",
+        "runtime_seconds": "",
+        "mean_runtime_per_window": "",
+        "context_padding_used": "",
+        "padding_left": "",
+        "padding_right": "",
+        "padding_top": "",
+        "padding_bottom": "",
+        "padding_mode": "",
         "status": status,
         "error": error,
         "resolved_device": "",
@@ -372,6 +413,11 @@ def _empty_result_row(
         "min_max_probability": "",
         "max_max_probability": "",
         "mask_path": "",
+        "prediction_mask_stitched_path": "",
+        "prediction_labels_stitched_npy_path": "",
+        "prediction_overlay_stitched_path": "",
+        "prediction_probabilities_stitched_npz_path": "",
+        "stitching_manifest_path": "",
         "prediction_mask_raw_path": "",
         "prediction_mask_visual_path": "",
         "prediction_labels_raw_npy_path": "",
@@ -442,6 +488,66 @@ def _copy_completed_outputs(
     return copied
 
 
+def _copy_context_stitch_outputs(
+    patch_id: str,
+    patch_summary: dict[str, Any],
+    output_dir: Path,
+) -> dict[str, str]:
+    outputs = patch_summary.get("outputs", {})
+    copy_specs = {
+        "prediction_mask_stitched_1024": (
+            output_dir / "masks_stitched" / f"{patch_id}__prediction_mask_stitched_1024.png"
+        ),
+        "prediction_labels_stitched_1024": (
+            output_dir / "labels_stitched" / f"{patch_id}__prediction_labels_stitched_1024.npy"
+        ),
+        "prediction_overlay_stitched_1024": (
+            output_dir
+            / "overlays_stitched"
+            / f"{patch_id}__prediction_overlay_stitched_1024.png"
+        ),
+        "prediction_probabilities_stitched_1024": (
+            output_dir
+            / "probabilities_stitched"
+            / f"{patch_id}__prediction_probabilities_stitched_1024.npz"
+        ),
+        "stitching_manifest": (
+            output_dir / "stitching_manifests" / f"{patch_id}__stitching_manifest.json"
+        ),
+        "input_preview": (
+            output_dir / "input_previews" / f"{patch_id}__input_preview.png"
+        ),
+    }
+    copied: dict[str, str] = {}
+    for key, destination in copy_specs.items():
+        source = outputs.get(key)
+        if not source:
+            copied[key] = ""
+            continue
+        source_path = Path(source)
+        if not source_path.exists():
+            copied[key] = ""
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination)
+        copied[key] = str(destination)
+    return copied
+
+
+def _padding_cells(padding: dict[str, object] | None) -> dict[str, object]:
+    padding = padding or {}
+    return {
+        "context_padding_used": _bool_cell(
+            padding.get("context_padding_used") or padding.get("padding_used")
+        ),
+        "padding_left": padding.get("padding_left", ""),
+        "padding_right": padding.get("padding_right", ""),
+        "padding_top": padding.get("padding_top", ""),
+        "padding_bottom": padding.get("padding_bottom", ""),
+        "padding_mode": padding.get("padding_mode", ""),
+    }
+
+
 def _result_row_from_summary(
     source_row: dict[str, str],
     *,
@@ -455,6 +561,16 @@ def _result_row_from_summary(
     selection_metadata = patch_summary.get("selection_metadata")
     input_validation = patch_summary.get("input_validation")
     probability_summary = patch_summary.get("probability_summary") or {}
+    inference_strategy = patch_summary.get("inference_strategy", "single-window")
+    padding_cells = _padding_cells(patch_summary.get("padding"))
+    stitched_mask_path = copied_outputs.get("prediction_mask_stitched_1024", "")
+    stitched_labels_path = copied_outputs.get("prediction_labels_stitched_1024", "")
+    stitched_overlay_path = copied_outputs.get("prediction_overlay_stitched_1024", "")
+    stitched_probabilities_path = copied_outputs.get(
+        "prediction_probabilities_stitched_1024",
+        "",
+    )
+    stitching_manifest_path = copied_outputs.get("stitching_manifest", "")
     return {
         "patch_id": patch_id,
         "filename": source_row.get("filename", ""),
@@ -464,6 +580,17 @@ def _result_row_from_summary(
         "patch_size": source_row.get("patch_size", ""),
         "selection_method": source_row.get("selection_method", ""),
         "source_wsi_path": source_row.get("source_wsi_path", ""),
+        "inference_strategy": inference_strategy,
+        "num_inference_windows": patch_summary.get("num_inference_windows", ""),
+        "context_margin": patch_summary.get("context_margin", ""),
+        "context_shape": _json_cell(patch_summary.get("context_shape")),
+        "window_prediction_shape": _json_cell(patch_summary.get("window_prediction_shape")),
+        "stitched_prediction_shape": _json_cell(
+            patch_summary.get("stitched_prediction_shape")
+        ),
+        "runtime_seconds": patch_summary.get("runtime_seconds", ""),
+        "mean_runtime_per_window": patch_summary.get("mean_runtime_per_window", ""),
+        **padding_cells,
         "status": patch_summary.get("status", "failed"),
         "error": error,
         "resolved_device": patch_summary.get("resolved_device") or "",
@@ -484,7 +611,12 @@ def _result_row_from_summary(
         "median_max_probability": probability_summary.get("median_max_probability", ""),
         "min_max_probability": probability_summary.get("min_max_probability", ""),
         "max_max_probability": probability_summary.get("max_max_probability", ""),
-        "mask_path": copied_outputs.get("prediction_mask", ""),
+        "mask_path": stitched_mask_path or copied_outputs.get("prediction_mask", ""),
+        "prediction_mask_stitched_path": stitched_mask_path,
+        "prediction_labels_stitched_npy_path": stitched_labels_path,
+        "prediction_overlay_stitched_path": stitched_overlay_path,
+        "prediction_probabilities_stitched_npz_path": stitched_probabilities_path,
+        "stitching_manifest_path": stitching_manifest_path,
         "prediction_mask_raw_path": copied_outputs.get("prediction_mask_raw", ""),
         "prediction_mask_visual_path": copied_outputs.get("prediction_mask_visual", ""),
         "prediction_labels_raw_npy_path": copied_outputs.get("prediction_labels_raw_npy", ""),
@@ -496,7 +628,7 @@ def _result_row_from_summary(
             "prediction_probabilities_npz",
             "",
         ),
-        "overlay_path": copied_outputs.get("prediction_overlay", ""),
+        "overlay_path": stitched_overlay_path or copied_outputs.get("prediction_overlay", ""),
         "overlay_with_legend_path": copied_outputs.get(
             "prediction_overlay_with_legend",
             "",
@@ -522,11 +654,13 @@ def _method_config_payload(
         "model_name": config.model_name,
         "device": config.requested_device,
         "input_mode": config.input_mode,
+        "inference_strategy": config.inference_strategy,
         "overlay_alpha": config.overlay_alpha,
         "input_selection_dir": str(input_selection_dir),
         "limit_patches": config.limit_patches,
         "strict_input_validation": config.strict_input_validation,
         "save_probabilities": config.save_probabilities,
+        "save_context_artifacts": config.save_context_artifacts,
         "save_visual_labels_npy": config.save_visual_labels_npy,
         "created_at": _utc_now_iso(),
         "clinical_warning": CLINICAL_WARNING,
@@ -601,6 +735,11 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         raise ValueError("--limit-patches must be positive when provided.")
     if not 0 <= config.overlay_alpha <= 1:
         raise ValueError("--overlay-alpha must be between 0 and 1.")
+    if config.inference_strategy not in INFERENCE_STRATEGIES:
+        supported = ", ".join(sorted(INFERENCE_STRATEGIES))
+        raise ValueError(f"Unsupported inference strategy: {config.inference_strategy}. Choose one of: {supported}.")
+    if config.inference_strategy == "context-stitch-2x2" and config.input_mode != "patch":
+        raise ValueError("context-stitch-2x2 currently requires --input-mode patch.")
 
     _validate_input_selection_dir(input_selection_dir)
     _prepare_output_dir(output_dir=output_dir, root_dir=root_dir, overwrite=config.overwrite)
@@ -633,7 +772,28 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
     num_patches_with_warnings = 0
     num_patches_with_resized_visualization = 0
     num_patches_with_probability_summary = 0
+    num_windows_inferred = 0
+    patch_runtime_values: list[float] = []
+    window_runtime_values: list[float] = []
+    num_patches_with_padding = 0
+    num_patches_without_coverage = 0
     unique_patch_warnings: set[str] = set()
+    context_runtime = None
+    slide_cache = None
+    run_context_stitch_patch = None
+    if config.inference_strategy == "context-stitch-2x2":
+        from src.inference.context_stitch_inference import (
+            SlideHandleCache,
+            build_context_stitch_segmentor,
+            run_context_stitch_patch as _run_context_stitch_patch,
+        )
+
+        context_runtime = build_context_stitch_segmentor(
+            model_name=config.model_name,
+            requested_device=config.requested_device,
+        )
+        slide_cache = SlideHandleCache()
+        run_context_stitch_patch = _run_context_stitch_patch
 
     for index, row in enumerate(selected_rows, start=1):
         selection_metadata = build_selection_metadata_for_patch(
@@ -661,6 +821,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                     error="missing filename",
                     selection_metadata=selection_metadata,
                 )
+                | {"inference_strategy": config.inference_strategy}
             )
             continue
 
@@ -677,6 +838,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                     error=f"selected patch file not found: {patch_path}",
                     selection_metadata=selection_metadata,
                 )
+                | {"inference_strategy": config.inference_strategy}
             )
             continue
 
@@ -687,22 +849,44 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
 
         patch_output_dir = output_dir / "per_patch" / patch_id
         try:
-            from src.inference.tiatoolbox_inference import run_inference_smoke_test
+            if config.inference_strategy == "context-stitch-2x2":
+                if (
+                    context_runtime is None
+                    or slide_cache is None
+                    or run_context_stitch_patch is None
+                ):
+                    raise RuntimeError("Context-stitch runtime was not initialized.")
+                if patch_output_dir.exists():
+                    shutil.rmtree(patch_output_dir)
+                patch_summary, patch_summary_path = run_context_stitch_patch(
+                    patch_id=patch_id,
+                    selected_patch_path=patch_path,
+                    patch_output_dir=patch_output_dir,
+                    selection_metadata=selection_metadata,
+                    runtime=context_runtime,
+                    slide_cache=slide_cache,
+                    overlay_alpha=config.overlay_alpha,
+                    strict_input_validation=config.strict_input_validation,
+                    save_probabilities=config.save_probabilities,
+                    save_context_artifacts=config.save_context_artifacts,
+                )
+            else:
+                from src.inference.tiatoolbox_inference import run_inference_smoke_test
 
-            patch_summary, patch_summary_path = run_inference_smoke_test(
-                image_path=patch_path,
-                output_dir=patch_output_dir,
-                root_dir=root_dir,
-                model_name=config.model_name,
-                requested_device=config.requested_device,
-                input_mode=config.input_mode,
-                overlay_alpha=config.overlay_alpha,
-                clear_output=True,
-                strict_input_validation=config.strict_input_validation,
-                selection_metadata=selection_metadata,
-                save_probabilities=config.save_probabilities,
-                save_visual_labels_npy=config.save_visual_labels_npy,
-            )
+                patch_summary, patch_summary_path = run_inference_smoke_test(
+                    image_path=patch_path,
+                    output_dir=patch_output_dir,
+                    root_dir=root_dir,
+                    model_name=config.model_name,
+                    requested_device=config.requested_device,
+                    input_mode=config.input_mode,
+                    overlay_alpha=config.overlay_alpha,
+                    clear_output=True,
+                    strict_input_validation=config.strict_input_validation,
+                    selection_metadata=selection_metadata,
+                    save_probabilities=config.save_probabilities,
+                    save_visual_labels_npy=config.save_visual_labels_npy,
+                )
             patch_warnings = [str(warning) for warning in patch_summary.get("warnings") or []]
             if patch_warnings:
                 num_patches_with_warnings += 1
@@ -712,11 +896,20 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                 num_patches_with_resized_visualization += 1
             if (patch_summary.get("probability_summary") or {}).get("available") is True:
                 num_patches_with_probability_summary += 1
-            copied_outputs = (
-                _copy_completed_outputs(patch_id, patch_summary, output_dir)
-                if patch_summary.get("status") == "completed"
-                else {}
-            )
+            copied_outputs = {}
+            if patch_summary.get("status") == "completed":
+                if config.inference_strategy == "context-stitch-2x2":
+                    copied_outputs = _copy_context_stitch_outputs(
+                        patch_id,
+                        patch_summary,
+                        output_dir,
+                    )
+                else:
+                    copied_outputs = _copy_completed_outputs(
+                        patch_id,
+                        patch_summary,
+                        output_dir,
+                    )
             result_rows.append(
                 _result_row_from_summary(
                     row,
@@ -728,6 +921,33 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
             )
             if patch_summary.get("status") == "completed":
                 completed += 1
+                patch_runtime = patch_summary.get("runtime_seconds")
+                if isinstance(patch_runtime, (int, float)):
+                    patch_runtime_values.append(float(patch_runtime))
+                windows = patch_summary.get("num_inference_windows")
+                try:
+                    windows_int = int(windows)
+                except (TypeError, ValueError):
+                    windows_int = 1
+                num_windows_inferred += windows_int
+                window_runtimes = patch_summary.get("window_runtime_seconds")
+                if isinstance(window_runtimes, list):
+                    window_runtime_values.extend(
+                        float(value)
+                        for value in window_runtimes
+                        if isinstance(value, (int, float))
+                    )
+                elif isinstance(patch_runtime, (int, float)) and windows_int > 0:
+                    window_runtime_values.append(float(patch_runtime) / windows_int)
+                if patch_summary.get("context_padding_used") is True:
+                    num_patches_with_padding += 1
+                coverage = patch_summary.get("coverage")
+                if isinstance(coverage, dict):
+                    try:
+                        if int(coverage.get("pixels_without_coverage", 0)) > 0:
+                            num_patches_without_coverage += 1
+                    except (TypeError, ValueError):
+                        pass
             else:
                 failed += 1
                 warnings.append(
@@ -745,8 +965,12 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
                     selection_metadata=selection_metadata,
                 )
                 | {"patch_inference_summary_path": str(patch_summary_path)}
+                | {"inference_strategy": config.inference_strategy}
             )
             warnings.append(f"Patch {patch_id} failed: {exc}")
+
+    if slide_cache is not None:
+        slide_cache.close()
 
     _write_csv(result_rows, per_patch_csv_path, PER_PATCH_SEGMENTATION_FIELDS)
     input_validation_summary = _summarize_input_validation(result_rows)
@@ -772,6 +996,7 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         "model_name": config.model_name,
         "requested_device": config.requested_device,
         "input_mode": config.input_mode,
+        "inference_strategy": config.inference_strategy,
         "overlay_alpha": config.overlay_alpha,
         "num_metadata_rows": len(selected_rows),
         "num_patches_attempted": attempted,
@@ -783,8 +1008,22 @@ def segment_selected_patches(config: SelectedPatchSegmentationConfig) -> dict[st
         "unique_patch_warnings": sorted(unique_patch_warnings),
         "num_patches_with_resized_visualization": num_patches_with_resized_visualization,
         "num_patches_with_probability_summary": num_patches_with_probability_summary,
+        "num_windows_inferred": num_windows_inferred,
+        "mean_runtime_per_patch": (
+            sum(patch_runtime_values) / len(patch_runtime_values)
+            if patch_runtime_values
+            else None
+        ),
+        "mean_runtime_per_window": (
+            sum(window_runtime_values) / len(window_runtime_values)
+            if window_runtime_values
+            else None
+        ),
+        "num_patches_with_padding": num_patches_with_padding,
+        "num_patches_without_coverage": num_patches_without_coverage,
         "strict_input_validation": config.strict_input_validation,
         "save_probabilities": config.save_probabilities,
+        "save_context_artifacts": config.save_context_artifacts,
         "save_visual_labels_npy": config.save_visual_labels_npy,
         "prediction_resolution_note": PREDICTION_RESOLUTION_NOTE,
         "input_validation_summary": input_validation_summary,

@@ -61,3 +61,26 @@ El manifest debe mantener `hypothesis_confirmed = "visual_review_required"`. Est
 ## 6. Limites
 
 Esta etapa no implementa QC avanzado, no agrega agregacion WSI final, no calcula RCB, no valida clinicamente y no reemplaza revision experta. Solo prepara trazabilidad tecnica para decidir si `context-stitch-2x2` merece integrarse despues como estrategia opcional.
+
+## 7. Verificacion de la ubicacion espacial del output
+
+Antes de integrar `context-stitch-2x2` al batch productivo, se agrega un probe separado:
+
+```bash
+python scripts/11_probe_tiatoolbox_output_placement.py \
+  --selection-dir outputs/patch_selection/v4_1_medical_embedding_assisted_tcga_a2_a3xs \
+  --patch-index 0 \
+  --output-dir outputs/context_stitch_probe/output_placement \
+  --run-source-inspection \
+  --run-coordinate-probe \
+  --run-tiatoolbox-merge-probe \
+  --overwrite
+```
+
+Este probe inspecciona la configuracion y el codigo instalado de TIAToolbox para responder si la salida `512x512` del modelo se ubica como prediccion central dentro del input `1024x1024`. La evidencia primaria viene de:
+
+- `UNetModel.infer_batch`, que aplica `centre_crop` despues de interpolar la prediccion.
+- `PatchExtractor.get_coordinates`, que centra la ventana de entrada grande alrededor del bound de salida mas pequeno.
+- `WSIPatchDataset` y `SemanticSegmentor`, que transportan `output_locs` separados de las coordenadas de entrada.
+
+La comparacion directa contra una mascara stitched puede ejecutarse como chequeo secundario, pero no debe tratarse como prueba definitiva. El resultado esperado del probe debe clasificarse explicitamente como `supported`, `contradicted` o `inconclusive`, y siempre bajo la advertencia: Technical segmentation/inference only. Not for diagnosis, not RCB, not clinical validation.

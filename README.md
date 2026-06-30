@@ -4,13 +4,11 @@ Repositorio del experimento presentado en el paper **“Selección de patches en
 
 ## Objetivo
 
-El proyecto compara un baseline TIAToolbox con un selector que combina calidad técnica, distribución espacial y embeddings UNI para elegir patches informativos desde un pool común.
-
-La salida del grupo es un insumo técnico para análisis posterior. El sistema debe entenderse como apoyo académico/computacional y no como herramienta clínica autónoma.
+Comparar un baseline TIAToolbox con un selector que combina calidad técnica, distribución espacial y embeddings UNI para elegir patches informativos desde un pool común.
 
 ## Alcance técnico
 
-El alcance conservado es:
+El experimento incluye:
 
 - generación del pool común con TIAToolbox y máscara Otsu;
 - selección baseline reproducible con semilla fija;
@@ -19,21 +17,9 @@ El alcance conservado es:
 - criterios de diversidad espacial;
 - métricas técnicas, espaciales, morfológicas y de tiempo.
 
-El flujo compara `baseline_tiatoolbox` contra `v4_1_medical_embedding_assisted` sobre nueve WSI, con 16 patches por WSI y método.
+El flujo compara `baseline_tiatoolbox` con `v4_1_medical_embedding_assisted` sobre nueve WSI, con 16 patches por WSI y método. La segmentación downstream no forma parte de este experimento.
 
-## Lo que este proyecto no hace
-
-Este proyecto no:
-
-- diagnostica cáncer;
-- reemplaza al patólogo;
-- calcula RCB completo;
-- cuantifica cáncer residual como objetivo principal del grupo;
-- promete validación clínica definitiva;
-- promete descartar tejido sano con certeza clínica;
-- sube datasets, WSI, checkpoints ni outputs pesados al repositorio.
-
-## Ruta técnica
+## Flujo del experimento
 
 ```text
 WSI / imagen histopatológica H&E
@@ -44,23 +30,7 @@ WSI / imagen histopatológica H&E
   -> tablas agregadas
 ```
 
-Ambos métodos reciben exactamente el mismo pool y el mismo presupuesto. La segmentación downstream no forma parte del experimento conservado en este repositorio.
-
-## Flujo principal de selección de patches
-
-Para el flujo principal del paper se consideran dos métodos:
-
-1. `baseline_tiatoolbox`
-   - Baseline real basado en TIAToolbox.
-   - Usa `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`.
-   - No usa segmentación, UNI, embeddings ni features médicas para seleccionar.
-
-2. `v4_1_medical_embedding_assisted`
-   - Selector técnico propuesto.
-   - Usa proxies técnicos de imagen médica y embeddings UNI como reranking morfológico.
-   - No usa segmentación para seleccionar, no calcula RCB y no emite diagnóstico.
-
-Para aislar el efecto del ranking y selección final, `baseline_tiatoolbox` y `v4_1_medical_embedding_assisted` parten del mismo pool inicial de candidatos generado con TIAToolbox `SlidingWindowPatchExtractor`, `input_mask="otsu"` y `min_mask_ratio`. El baseline selecciona de forma reproducible desde ese pool, mientras que v4.1 aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico sobre el mismo universo inicial.
+Ambos métodos reciben el mismo pool inicial y el mismo presupuesto. `baseline_tiatoolbox` selecciona de forma reproducible desde ese pool; `v4_1_medical_embedding_assisted` aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico.
 
 ## Estructura del repositorio
 
@@ -82,48 +52,43 @@ Para aislar el efecto del ranking y selección final, `baseline_tiatoolbox` y `v
 └── src/
 ```
 
-Las WSI, los pesos UNI y las corridas pesadas se mantienen fuera de Git. Solo se versionan los agregados pequeños utilizados para verificar las cifras del paper.
+Las WSI, los pesos UNI y las corridas completas se mantienen fuera de Git. Solo se versionan los agregados utilizados para verificar las cifras del paper.
 
-## Ambientes reproducibles
+## Instalación
 
-Se usa Conda/Mamba como primera opción porque permite coordinar dependencias Python y librerías nativas como OpenSlide de forma más controlada entre macOS, Linux y servidores con GPU.
-
-## Instalación local
+Conda/Mamba permite coordinar las dependencias Python y librerías nativas como OpenSlide entre macOS, Linux y servidores con GPU.
 
 ```bash
 mamba env create -f environment.yml
 mamba activate inf402-lumina-seg
-python scripts/verificar_entorno.py
 ```
 
-Si no tienes `mamba`, puedes usar `conda env create -f environment.yml`.
+Si `mamba` no está disponible, se puede usar `conda env create -f environment.yml`.
 
-## Verificación de ambiente
+## Verificación del entorno
 
 ```bash
 python scripts/verificar_entorno.py
 ```
 
-El script revisa las dependencias efectivamente importadas por el pipeline y las carpetas mínimas.
+El script revisa las dependencias importadas por el pipeline y las carpetas mínimas.
 
-## Ejecución provisional del flujo final
+## Ejecución del experimento
 
-Con el ambiente activo, ubicar las nueve WSI según `data/README.md` y el checkpoint UNI según `models/README.md`. Luego ejecutar:
+La ubicación esperada de las nueve WSI se describe en `data/README.md`, y la del checkpoint UNI en `models/README.md`. Con el ambiente activo:
 
 ```bash
-python scripts/verificar_entorno.py
 python scripts/ejecutar_experimento.py
 python scripts/generar_resultados.py
 ```
 
-Los parámetros metodológicos del paper están fijados en `ejecutar_experimento.py`; los argumentos de terminal solo configuran rutas, cantidad esperada de casos, sobrescritura y autocomprobaciones.
+Los parámetros metodológicos del paper están fijados en `scripts/ejecutar_experimento.py`; los argumentos de terminal configuran rutas, cantidad esperada de casos, sobrescritura y autocomprobaciones.
 
-## Pendientes para la reescritura del README
+## Resultados
 
-- documentar la fuente exacta y condiciones de acceso de las nueve WSI;
-- resolver la discrepancia entre la mención a BACH y los identificadores `TCGA-*` preservados;
-- explicar la obtención autorizada del checkpoint UNI;
-- describir cada archivo versionado en `results/metrics/` y `results/tables/`;
-- agregar tiempos y requisitos de hardware observados;
-- incorporar una tabla que relacione métricas y tablas con el manuscrito;
-- registrar las validaciones completas cuando se repita el experimento desde cero.
+Los resultados agregados utilizados en el paper se encuentran en:
+
+- `results/metrics/`
+- `results/tables/`
+
+Las corridas completas se generan bajo `results/runs/` y no se versionan debido a su tamaño.

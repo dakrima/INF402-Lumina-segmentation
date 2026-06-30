@@ -24,7 +24,18 @@ def save_patch_selection_preview(
     selected_color: tuple[int, int, int] = (0, 180, 0),
     rejected_color: tuple[int, int, int] = (220, 40, 40),
 ) -> Path:
-    """Dibuja en verde los patches seleccionados y en rojo los rechazados."""
+    """
+    ***
+    * rgb_image: Imagen base donde se dibujarán los rectángulos.
+    * patches: Coordenadas, tamaño y estado de cada patch.
+    * output_path: Ruta de la imagen generada.
+    * selected_color: Color RGB de los patches seleccionados.
+    * rejected_color: Color RGB de los patches rechazados.
+    ***
+    Dibuja los rectángulos sobre una copia RGB y guarda la preview.
+
+    Retorna la ruta del archivo generado.
+    """
     preview = rgb_image.convert("RGB").copy()
     draw = ImageDraw.Draw(preview)
     line_width = max(1, min(preview.size) // 180)

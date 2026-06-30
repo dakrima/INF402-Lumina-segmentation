@@ -96,18 +96,21 @@ class BaselineSelectionConfig:
 
 
 def _resolve_output_dir(output_dir: Path, root_dir: Path) -> Path:
+    """Resuelve una salida relativa respecto de la raíz del proyecto."""
     if output_dir.is_absolute():
         return output_dir.expanduser().resolve()
     return (root_dir / output_dir).resolve()
 
 
 def _has_user_outputs(output_dir: Path) -> bool:
+    """Indica si una carpeta contiene archivos distintos de `.gitkeep`."""
     if not output_dir.exists():
         return False
     return any(child.name != ".gitkeep" for child in output_dir.iterdir())
 
 
 def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> None:
+    """Valida, limpia cuando corresponde y crea la carpeta de salida del método."""
     if _has_user_outputs(output_dir) and not overwrite:
         raise FileExistsError(
             f"Output directory already exists and is not empty: {output_dir}. "
@@ -120,6 +123,7 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
 
 
 def _validate_config(config: BaselineSelectionConfig, wsi_path: Path) -> None:
+    """Valida selector, rangos numéricos, extensión y existencia de la WSI."""
     if config.selector != BASELINE_SELECTOR_NAME:
         raise NotImplementedError(
             f"Selector '{config.selector}' todavía no está implementado. "
@@ -143,6 +147,7 @@ def _validate_config(config: BaselineSelectionConfig, wsi_path: Path) -> None:
 
 
 def _base_slide_metadata(slide: object) -> dict[str, Any]:
+    """Extrae dimensiones, niveles, objetivo y MPP desde una WSI OpenSlide."""
     slide_width, slide_height = slide.dimensions
     return {
         "slide_width": slide_width,
@@ -175,6 +180,7 @@ def _import_tiatoolbox_extractor() -> tuple[type[Any], str]:
 
 
 def _as_optional_number(value: object) -> int | float | str | None:
+    """Convierte escalares NumPy a tipos serializables sin perder valores opcionales."""
     if value is None:
         return None
     if isinstance(value, np.generic):
@@ -222,6 +228,7 @@ def _build_tiatoolbox_extractor(
     wsi_path: Path,
     config: BaselineSelectionConfig,
 ) -> tuple[object, str]:
+    """Construye `SlidingWindowPatchExtractor` con máscara Otsu en nivel 0."""
     SlidingWindowPatchExtractor, tiatoolbox_version = _import_tiatoolbox_extractor()
     extractor = SlidingWindowPatchExtractor(
         input_img=str(wsi_path),
@@ -236,6 +243,11 @@ def _build_tiatoolbox_extractor(
 
 
 def _candidates_from_extractor(extractor: object, patch_size: int) -> list[TiatoolboxCandidate]:
+    """
+    Convierte `locations_df` en candidatos trazables de nivel 0.
+
+    Conserva el índice TIAToolbox para recuperar exactamente cada patch posteriormente.
+    """
     locations_df = getattr(extractor, "locations_df", None)
     if locations_df is None:
         raise RuntimeError("TIAToolbox extractor did not expose locations_df.")
@@ -388,6 +400,7 @@ def write_shared_candidate_manifest(
 
 
 def _patch_image_from_extractor(extractor: object, tiatoolbox_index: int) -> Image.Image:
+    """Recupera un patch por índice TIAToolbox y lo normaliza a imagen RGB."""
     patch = extractor[tiatoolbox_index]
     if isinstance(patch, Image.Image):
         return patch.convert("RGB")
@@ -401,6 +414,7 @@ def _patch_image_from_extractor(extractor: object, tiatoolbox_index: int) -> Ima
 
 
 def _thumbnail_from_extractor(extractor: object, max_size: int) -> Image.Image | None:
+    """Obtiene un thumbnail RGB acotado o retorna `None` si no está disponible."""
     wsi = getattr(extractor, "wsi", None)
     if wsi is None:
         return None
@@ -426,6 +440,7 @@ def _candidate_pool_row(
     wsi_path: Path,
     slide_metadata: dict[str, Any],
 ) -> dict[str, object]:
+    """Construye la fila inicial de metadata para un candidato del pool común."""
     thumbnail_tissue_ratio = getattr(candidate, "thumbnail_tissue_ratio", "")
     if isinstance(thumbnail_tissue_ratio, float):
         thumbnail_tissue_ratio = f"{thumbnail_tissue_ratio:.6f}"
@@ -462,6 +477,7 @@ def _selected_row(
     patch_id: str,
     filename: str,
 ) -> dict[str, object]:
+    """Construye la fila persistida de un patch seleccionado por el baseline."""
     return {
         "patch_id": patch_id,
         "filename": filename,
@@ -496,6 +512,7 @@ def _method_config(
     *,
     tiatoolbox_version: str | None = None,
 ) -> dict[str, object]:
+    """Registra configuración, versión TIAToolbox y definición del pool baseline."""
     return {
         "selector": config.selector,
         "patch_size": config.patch_size,

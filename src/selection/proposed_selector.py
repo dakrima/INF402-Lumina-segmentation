@@ -187,6 +187,7 @@ class V41MedicalEmbeddingAssistedConfig:
 
 
 def _validate_config(config: V41MedicalEmbeddingAssistedConfig, wsi_path: Path) -> None:
+    """Valida rutas, rangos y opciones permitidas antes de ejecutar el selector."""
     if config.selector != V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME:
         raise NotImplementedError(
             f"Selector '{config.selector}' is not handled by v4_1_medical_embedding_assisted."
@@ -263,6 +264,7 @@ def _method_config(
     embedding_cache_path: Path,
     tiatoolbox_version: str | None = None,
 ) -> dict[str, object]:
+    """Construye el manifiesto de configuración y trazabilidad del método propuesto."""
     return {
         "selector": config.selector,
         "selector_name": config.selector,
@@ -343,6 +345,7 @@ def _v41_candidate_pool_row(
     wsi_path: Path,
     slide_metadata: dict[str, Any],
 ) -> dict[str, object]:
+    """Extiende una fila del pool común con los campos propios del selector v4.1."""
     row = _tiatoolbox_candidate_pool_row(
         candidate,
         config=config,
@@ -374,6 +377,7 @@ def _score_quantile_by_field(
     field_name: str,
     quantile: float,
 ) -> float:
+    """Calcula el cuantil por rango más cercano para un campo numérico."""
     if not records:
         return 0.0
     values = sorted(_safe_float(record.get(field_name), 0.0) for record in records)
@@ -383,6 +387,7 @@ def _score_quantile_by_field(
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Indica si una ruta resuelta se encuentra dentro de otra."""
     try:
         path.relative_to(parent)
     except ValueError:
@@ -391,6 +396,7 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def _output_local_embedding_cache_paths(output_dir: Path) -> tuple[Path, Path]:
+    """Retorna las rutas locales del cache y su metadata dentro de la corrida."""
     return output_dir / EMBEDDING_CACHE_FILE, output_dir / EMBEDDING_CACHE_METADATA_FILE
 
 
@@ -401,6 +407,16 @@ def _apply_medical_features(
     candidates_to_score: list[object],
     config: V41MedicalEmbeddingAssistedConfig,
 ) -> None:
+    """
+    ***
+    * records: Registros técnicos de los candidatos.
+    * slide: WSI abierta para lectura por coordenadas.
+    * candidates_to_score: Candidatos en el mismo orden que los registros.
+    * config: Configuración que define tamaño de patch y features.
+    ***
+    Lee cada patch, calcula las features médicas clásicas y modifica directamente el
+    registro correspondiente. No retorna ningún valor.
+    """
     for record, candidate in zip(records, candidates_to_score):
         patch_image = slide.read_region(
             (candidate.x_level0, candidate.y_level0),
@@ -417,6 +433,11 @@ def _apply_medical_features(
 
 
 def _apply_v41_static_scores(records: list[dict[str, object]]) -> None:
+    """
+    Combina el score técnico v3 con calidad y utilidad médicas usando los pesos v4.1.
+
+    Los registros se modifican directamente y conservan su orden.
+    """
     for record in records:
         score_v3_base = _safe_float(record.get("score_v3_base", record.get("score_raw")))
         medical_quality = _safe_float(record.get("medical_image_quality_score"))
@@ -438,6 +459,12 @@ def _load_or_compute_embeddings_v41(
     warnings: list[str],
     embedding_extractor: PatchEmbeddingExtractor | None = None,
 ) -> tuple[np.ndarray, bool, Path, Path]:
+    """
+    Reutiliza un cache UNI compatible o calcula los embeddings de los candidatos.
+
+    Si un cache externo resulta incompatible, conserva ese archivo y escribe el nuevo
+    cache dentro de la corrida. Retorna embeddings, indicador de reutilización y rutas.
+    """
     candidate_ids = [candidate.candidate_id for candidate in candidates_to_score]
     cache_path, metadata_path = _embedding_cache_paths(config, output_dir)
     if config.reuse_embedding_cache and cache_path.exists() and metadata_path.exists():
@@ -497,6 +524,7 @@ def _load_or_compute_embeddings_v41(
 
 
 def _selected_row(candidate_row: dict[str, object]) -> dict[str, object]:
+    """Extrae de un candidato los campos persistidos para patches seleccionados."""
     return {
         field_name: candidate_row.get(field_name, "")
         for field_name in SELECTED_METADATA_FIELDS
@@ -512,6 +540,7 @@ def _update_candidate_row_with_v41(
     embedding_dim: int | None,
     embedding_cache_used: bool,
 ) -> None:
+    """Copia scores médicos y de embeddings a la fila persistida del candidato."""
     _update_candidate_row_from_record(row, record)
     row["selector"] = V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME
     row["selection_method"] = V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME
@@ -531,6 +560,7 @@ def _cluster_balance_score(
     record: dict[str, object],
     selected_records: list[dict[str, object]],
 ) -> float:
+    """Favorece clusters con menos patches ya seleccionados."""
     cluster_id = str(record.get("embedding_cluster_id", ""))
     selected_in_cluster = sum(
         1 for selected in selected_records
@@ -548,6 +578,12 @@ def _v41_score(
     config: V41MedicalEmbeddingAssistedConfig,
     min_distance_level0: float,
 ) -> tuple[float, dict[str, float]]:
+    """
+    Calcula el score final de un candidato respecto de la selección acumulada.
+
+    Combina score estático, penalización espacial, diversidad de features, novedad
+    morfológica, balance de clusters y redundancia. Retorna score y componentes.
+    """
     spatial_penalty = proximity_penalty(
         candidate=record,
         selected_records=selected_records,
@@ -612,6 +648,7 @@ def _pick_best_record(
     config: V41MedicalEmbeddingAssistedConfig,
     min_distance_level0: float,
 ) -> tuple[dict[str, object] | None, float, dict[str, float]]:
+    """Elige el candidato con mayor score y desempata por `candidate_id`."""
     best_record: dict[str, object] | None = None
     best_score = -math.inf
     best_components: dict[str, float] = {}
@@ -643,6 +680,7 @@ def _mark_record(
     score_final: float,
     components: dict[str, float],
 ) -> None:
+    """Marca un registro como seleccionado y guarda rango, score y componentes."""
     record["selected"] = True
     record["rank"] = rank
     record["score_final"] = float(score_final)
@@ -656,6 +694,7 @@ def _top_medical_records(
     top_quantile: float,
     top_k: int | None,
 ) -> list[dict[str, object]]:
+    """Filtra el cuantil superior de utilidad médica y aplica un límite opcional."""
     if not records:
         return []
     threshold = _score_quantile_by_field(
@@ -685,6 +724,12 @@ def _eligible_records(
     *,
     config: V41MedicalEmbeddingAssistedConfig,
 ) -> tuple[list[dict[str, object]], dict[str, object], list[str]]:
+    """
+    Aplica en orden el filtro estricto y sus fallbacks técnicos documentados.
+
+    Retorna candidatos elegibles, conteos por etapa y advertencias cuando fue necesario
+    relajar umbrales para completar el presupuesto.
+    """
     warnings: list[str] = []
     v3_threshold = _score_quantile_by_field(
         records,
@@ -755,6 +800,13 @@ def _select_v41_records(
     slide_dimensions: tuple[int, int],
     min_distance_level0: int,
 ) -> tuple[list[dict[str, object]], dict[str, object], list[str]]:
+    """
+    Selecciona patches alternando regiones y aplicando el score v4.1 de forma greedy.
+
+    Completa cupos desde el pool elegible cuando una región se agota y calcula el score
+    final de los no seleccionados para mantener trazabilidad. Retorna selección,
+    estadísticas espaciales y advertencias técnicas.
+    """
     warnings: list[str] = []
     assign_spatial_regions(
         records=records,

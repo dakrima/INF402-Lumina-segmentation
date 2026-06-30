@@ -49,7 +49,7 @@ EMBEDDING_CLUSTER_SUMMARY_FIELDS = [
 
 
 def embedding_cache_paths(config: Any, output_dir: Path) -> tuple[Path, Path]:
-    """Resuelve las rutas del cache UNI sin escribir archivos."""
+    """Resuelve las rutas del cache UNI y su metadata sin escribir archivos."""
     if config.embedding_cache_path is None:
         return output_dir / EMBEDDING_CACHE_FILE, output_dir / EMBEDDING_CACHE_METADATA_FILE
     cache_path = config.embedding_cache_path.expanduser()
@@ -117,7 +117,12 @@ def apply_embedding_metrics(
     embeddings: np.ndarray,
     config: Any,
 ) -> tuple[dict[str, object], list[str]]:
-    """Agrupa los embeddings y agrega métricas morfológicas a cada candidato."""
+    """
+    Agrupa los embeddings y agrega cluster, distancia al centroide y representatividad
+    a cada candidato.
+
+    Retorna estadísticas de clustering y advertencias del algoritmo utilizado.
+    """
     labels, centroids, clustering_method, warnings = cluster_embeddings(
         embeddings,
         cluster_count=config.embedding_cluster_count,
@@ -155,7 +160,11 @@ def apply_embedding_metrics(
 
 
 def write_cluster_summary(*, records: list[dict[str, object]], output_path: Path) -> Path:
-    """Guarda el resumen por cluster del reranking morfológico."""
+    """
+    Guarda cantidad de candidatos, seleccionados y scores medios por cluster.
+
+    Crea la carpeta necesaria y retorna la ruta del CSV generado.
+    """
     rows: list[dict[str, object]] = []
     cluster_ids = sorted({str(record.get("embedding_cluster_id", "")) for record in records})
     for cluster_id in cluster_ids:
@@ -187,6 +196,7 @@ def write_cluster_summary(*, records: list[dict[str, object]], output_path: Path
 
 
 def _mean_record_value(records: list[dict[str, object]], field_name: str) -> float | None:
+    """Retorna la media finita de un campo o `None` cuando no hay valores válidos."""
     values = [safe_float(record.get(field_name), float("nan")) for record in records]
     values = [value for value in values if np.isfinite(value)]
     return float(sum(values) / len(values)) if values else None

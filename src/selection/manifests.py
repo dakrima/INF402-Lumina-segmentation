@@ -232,7 +232,16 @@ def write_csv_manifest(
     output_path: Path,
     fieldnames: list[str],
 ) -> Path:
-    """Escribe filas en CSV con columnas y orden estables."""
+    """
+    ***
+    * rows: Registros que serán persistidos.
+    * output_path: Ruta del CSV de salida.
+    * fieldnames: Columnas y orden contractual del manifiesto.
+    ***
+    Crea la carpeta necesaria y escribe únicamente las columnas declaradas.
+
+    Retorna la ruta del archivo generado.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
@@ -243,7 +252,15 @@ def write_csv_manifest(
 
 
 def write_json_manifest(payload: dict[str, Any], output_path: Path) -> Path:
-    """Escribe un manifiesto JSON indentado."""
+    """
+    ***
+    * payload: Contenido serializable del manifiesto.
+    * output_path: Ruta del JSON de salida.
+    ***
+    Crea la carpeta necesaria y guarda JSON indentado con claves ordenadas.
+
+    Retorna la ruta del archivo generado.
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",

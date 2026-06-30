@@ -17,7 +17,15 @@ def _safe_float(value: object) -> float | None:
 
 
 def normalize_feature(values: Iterable[object]) -> list[float]:
-    """Normaliza a [0, 1] y usa 0.5 para series constantes o valores inválidos."""
+    """
+    ***
+    * values: Serie numérica que será normalizada.
+    ***
+    Aplica normalización min-max al intervalo [0, 1]. Usa 0.5 para valores inválidos
+    y para series sin variación.
+
+    Retorna los valores normalizados en el mismo orden.
+    """
     raw_values = list(values)
     safe_values = [_safe_float(value) for value in raw_values]
     valid_values = [value for value in safe_values if value is not None]

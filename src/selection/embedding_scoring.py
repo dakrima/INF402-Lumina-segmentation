@@ -50,6 +50,7 @@ class PatchEmbeddingExtractor:
         model_path: Path,
         distance_metric: str,
     ) -> None:
+        """Inicializa el modelo, dispositivo, metadata y locks de inferencia compartida."""
         self.model = model
         self.torch = torch_module
         self.device = device
@@ -62,6 +63,7 @@ class PatchEmbeddingExtractor:
         self._wait_seconds_by_thread: dict[int, float] = {}
 
     def _preprocess_batch(self, patches: Sequence[Image.Image]) -> object:
+        """Convierte una secuencia de patches RGB en un lote de tensores para UNI."""
         tensors = [
             _pil_to_imagenet_tensor(patch, torch_module=self.torch)
             for patch in patches
@@ -69,7 +71,11 @@ class PatchEmbeddingExtractor:
         return self.torch.stack(tensors, dim=0).to(self.device)
 
     def embed_batch(self, patches: Sequence[Image.Image]) -> np.ndarray:
-        """Retorna los embeddings de un lote de patches RGB."""
+        """
+        Ejecuta UNI bajo un lock para compartir una sola instancia entre WSI concurrentes.
+
+        Retorna una matriz bidimensional con un embedding normalizado por patch.
+        """
         if not patches:
             return np.zeros((0, 0), dtype=np.float32)
         wait_started = time.perf_counter()
@@ -110,6 +116,7 @@ class PatchEmbeddingExtractor:
 
 
 def _import_torch() -> object:
+    """Importa PyTorch de forma diferida y entrega un error técnico contextualizado."""
     try:
         import torch  # type: ignore
     except Exception as exc:  # noqa: BLE001 - dependency diagnostic
@@ -121,6 +128,7 @@ def _import_torch() -> object:
 
 
 def _resolve_device(torch_module: object, requested_device: str) -> object:
+    """Resuelve `auto` a CUDA, MPS o CPU y valida la disponibilidad solicitada."""
     if requested_device == "auto":
         if torch_module.cuda.is_available():
             requested_device = "cuda"
@@ -150,6 +158,7 @@ def _pil_to_imagenet_tensor(patch: Image.Image, *, torch_module: object) -> obje
 
 
 def _checkpoint_state_dict(checkpoint: object) -> dict[str, object]:
+    """Extrae y normaliza las claves del `state_dict` de un checkpoint UNI."""
     if isinstance(checkpoint, dict):
         for key in ("model", "state_dict", "teacher", "module"):
             value = checkpoint.get(key)
@@ -176,6 +185,11 @@ def _load_uni_model_from_path(
     torch_module: object,
     device: object,
 ) -> object:
+    """
+    Carga UNI desde TorchScript o desde un checkpoint compatible con ViT-L/16.
+
+    Retorna el modelo en modo evaluación y ubicado en el dispositivo indicado.
+    """
     if not model_path.exists():
         raise RuntimeError(f"{UNI_BACKEND_MISSING_MESSAGE} Path does not exist: {model_path}")
 
@@ -240,6 +254,7 @@ def _load_uni_model_from_path(
 
 
 def _build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddingExtractor:
+    """Valida la configuración, carga UNI y construye su wrapper de inferencia."""
     if config.embedding_backend != "uni":
         raise RuntimeError(
             f"Unsupported embedding backend '{config.embedding_backend}'. Only 'uni' is implemented."
@@ -273,6 +288,7 @@ _EMBEDDING_EXTRACTOR_LOAD_COUNT = 0
 
 
 def _embedding_extractor_cache_key(config: EmbeddingExtractorConfig) -> tuple[str, ...]:
+    """Construye la clave estable usada para reutilizar el extractor dentro del proceso."""
     model_path = (
         str(config.embedding_model_path.expanduser().resolve())
         if config.embedding_model_path is not None
@@ -344,7 +360,11 @@ def write_embedding_cache(
     metadata_path: Path,
     metadata: dict[str, Any],
 ) -> tuple[Path, Path]:
-    """Guarda embeddings y metadata en archivos de cache de la corrida."""
+    """
+    Guarda embeddings, IDs y metadata de reproducibilidad en NPZ y JSON.
+
+    Crea las carpetas necesarias y retorna las rutas de ambos archivos.
+    """
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -371,7 +391,7 @@ def load_embedding_cache(
     cache_path: Path,
     metadata_path: Path,
 ) -> tuple[np.ndarray, list[str], dict[str, Any]]:
-    """Carga un cache generado por `write_embedding_cache`."""
+    """Carga un cache y retorna embeddings, IDs de candidatos y metadata."""
     if not cache_path.exists() or not metadata_path.exists():
         raise FileNotFoundError(
             f"Embedding cache not found: {cache_path} / {metadata_path}"
@@ -394,7 +414,7 @@ def validate_embedding_cache(
     embedding_distance_metric: str,
     expected_dim: int | None,
 ) -> str | None:
-    """Retorna `None` si el cache coincide; de lo contrario explica la diferencia."""
+    """Valida IDs, modelo, métrica y dimensiones; retorna el motivo de incompatibilidad."""
     if candidate_ids != cached_candidate_ids:
         return "Embedding cache candidate_ids do not match the current candidate subset."
     if metadata.get("embedding_backend") != embedding_backend:
@@ -411,6 +431,7 @@ def validate_embedding_cache(
 
 
 def _embedding_distance(a: np.ndarray, b: np.ndarray, metric: str) -> np.ndarray:
+    """Calcula la matriz de distancia coseno o euclidiana entre dos conjuntos."""
     if metric == "cosine":
         return 1.0 - (a @ b.T)
     if metric == "euclidean":
@@ -426,7 +447,12 @@ def cluster_embeddings(
     seed: int,
     distance_metric: str = "cosine",
 ) -> tuple[np.ndarray, np.ndarray, str, list[str]]:
-    """Agrupa embeddings y retorna etiquetas, centroides, método y advertencias."""
+    """
+    Agrupa embeddings con KMeans y la semilla del experimento.
+
+    Si scikit-learn no está disponible, utiliza el fallback determinista local. Retorna
+    etiquetas, centroides, nombre del método y advertencias técnicas.
+    """
     warnings: list[str] = []
     if embeddings.ndim != 2:
         raise ValueError("embeddings must be a 2D array.")
@@ -466,6 +492,7 @@ def _fallback_kmeans(
     distance_metric: str,
     iterations: int = 12,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Implementa un KMeans determinista mínimo cuando scikit-learn no está disponible."""
     rng = np.random.default_rng(seed)
     n_rows = embeddings.shape[0]
     first_index = int(rng.integers(0, n_rows))
@@ -509,7 +536,7 @@ def embedding_cluster_metrics(
     *,
     distance_metric: str,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Retorna distancia al centroide y score de representatividad."""
+    """Retorna distancia al centroide y score de representatividad normalizado."""
     if embeddings.size == 0:
         return np.zeros((0,), dtype=np.float32), np.zeros((0,), dtype=np.float32)
     distances = np.zeros((embeddings.shape[0],), dtype=np.float32)

@@ -14,6 +14,7 @@ SUPPORTED_WSI_EXTENSIONS = {".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn", "
 
 
 def _import_openslide() -> object:
+    """Importa OpenSlide de forma diferida y contextualiza errores de dependencia."""
     try:
         return importlib.import_module("openslide")
     except Exception as exc:  # noqa: BLE001 - diagnóstico de dependencia nativa
@@ -23,6 +24,7 @@ def _import_openslide() -> object:
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Indica si una ruta se encuentra dentro de otra."""
     try:
         path.relative_to(parent)
     except ValueError:

@@ -82,6 +82,12 @@ TOLERANCE = 2e-6
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Construye el parser para localizar una corrida y validar su número de casos.
+
+    Retorna el namespace con la carpeta del experimento, cantidad esperada y opción
+    de autocomprobación.
+    """
     parser = argparse.ArgumentParser(
         description="Calcula diversidad morfológica con los embeddings UNI persistidos.",
     )
@@ -92,16 +98,26 @@ def parse_args() -> argparse.Namespace:
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:
+    """Lee un manifiesto CSV y retorna sus filas como diccionarios de texto."""
     with path.open(newline="", encoding="utf-8") as csv_file:
         return list(csv.DictReader(csv_file))
 
 
 def canonical_hash(payload: object) -> str:
+    """Calcula SHA-256 sobre una serialización JSON canónica y reproducible."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def descriptive(values: list[float]) -> dict[str, float | int]:
+    """
+    ***
+    * values: Valores de una métrica para los casos evaluados.
+    ***
+    Calcula cantidad, media, desviación estándar muestral, mediana y cuartiles.
+
+    Retorna un diccionario con los estadísticos descriptivos del paper.
+    """
     array = np.asarray(values, dtype=np.float64)
     q1, q3 = np.percentile(array, [25, 75])
     return {
@@ -170,6 +186,17 @@ def selected_candidate_ids(
     selected_rows: list[dict[str, str]],
     shared_rows: list[dict[str, str]],
 ) -> tuple[list[str], str]:
+    """
+    ***
+    * case_id: Identificador persistido de la WSI.
+    * selected_rows: Patches seleccionados por un método.
+    * shared_rows: Candidatos del pool común de la misma WSI.
+    ***
+    Traza cada selección al pool común mediante coordenadas, nivel, tamaño e índice
+    TIAToolbox. Rechaza selecciones ausentes o duplicadas.
+
+    Retorna los identificadores de candidatos y la huella canónica de la selección.
+    """
     shared_by_key = {
         (
             row["x_level0"],
@@ -212,6 +239,15 @@ def selected_candidate_ids(
 
 
 def analyze_case(case_dir: Path) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """
+    ***
+    * case_dir: Carpeta de un caso con baseline, v4.1, pool común y cache UNI.
+    ***
+    Valida el cache, recupera los embeddings exactos de los patches elegidos y calcula
+    las métricas morfológicas de ambos métodos.
+
+    Retorna las filas por método y el detalle de las validaciones realizadas.
+    """
     case_id = case_dir.name
     cache_path = case_dir / "v4_1" / "embedding_cache.npz"
     cache_metadata_path = case_dir / "v4_1" / "embedding_cache_metadata.json"
@@ -284,6 +320,14 @@ def analyze_case(case_dir: Path) -> tuple[list[dict[str, object]], dict[str, obj
 
 
 def aggregate_rows(per_wsi_rows: list[dict[str, object]]) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """
+    ***
+    * per_wsi_rows: Métricas morfológicas por caso y método.
+    ***
+    Agrega cada métrica por método y calcula diferencias pareadas v4.1 menos baseline.
+
+    Retorna las filas del CSV agregado y el resumen estructurado para JSON y Markdown.
+    """
     by_case = {
         case_id: {str(row["method"]): row for row in per_wsi_rows if row["case_id"] == case_id}
         for case_id in sorted({str(row["case_id"]) for row in per_wsi_rows})
@@ -349,6 +393,7 @@ def aggregate_rows(per_wsi_rows: list[dict[str, object]]) -> tuple[list[dict[str
 
 
 def format_stats(stats: dict[str, float | int]) -> tuple[str, str]:
+    """Formatea media con desviación y mediana con cuartiles sin alterar los valores."""
     return (
         f"{float(stats['mean']):.6f} ± {float(stats['sd']):.6f}",
         f"{float(stats['median']):.6f} [{float(stats['q1']):.6f}, {float(stats['q3']):.6f}]",
@@ -356,6 +401,15 @@ def format_stats(stats: dict[str, float | int]) -> tuple[str, str]:
 
 
 def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[str, float]]) -> str:
+    """
+    ***
+    * summary: Estadísticos agregados de diversidad morfológica.
+    * case_differences: Diferencias pareadas por WSI.
+    ***
+    Genera la tabla Markdown versionada con resultados agregados y por caso.
+
+    Retorna el documento completo como texto.
+    """
     lines = [
         "# Diversidad morfológica aproximada en el espacio UNI",
         "",
@@ -425,6 +479,7 @@ def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[st
 
 
 def self_check() -> None:
+    """Verifica distancias coseno conocidas sobre tres embeddings sintéticos."""
     embeddings = np.asarray([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]], dtype=np.float32)
     metrics, validation = distance_metrics(embeddings)
     assert math.isclose(metrics["mean_pairwise_cosine_distance"], 4.0 / 3.0, abs_tol=1e-7)
@@ -434,6 +489,12 @@ def self_check() -> None:
 
 
 def main() -> int:
+    """
+    Valida los nueve casos, reutiliza los caches UNI y escribe métricas morfológicas
+    por WSI, agregados, resumen JSON y tabla Markdown.
+
+    Retorna cero cuando todas las validaciones y escrituras finalizan correctamente.
+    """
     args = parse_args()
     if args.self_check:
         self_check()

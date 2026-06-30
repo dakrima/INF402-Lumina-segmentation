@@ -7,6 +7,7 @@ import statistics
 
 
 def patch_center(record: dict[str, object]) -> tuple[float, float]:
+    """Retorna el centro del patch en coordenadas de nivel 0."""
     patch_size = float(record["patch_size"])
     return (
         float(record["x_level0"]) + patch_size / 2.0,
@@ -99,6 +100,7 @@ def _score_with_penalties(
     feature_diversity_weight: float,
     feature_names: list[str],
 ) -> tuple[float, float, float]:
+    """Retorna score final, penalización espacial y bonificación de diversidad."""
     spatial_penalty = proximity_penalty(
         candidate=record,
         selected_records=selected_records,
@@ -130,7 +132,12 @@ def greedy_select_with_spatial_penalty(
     feature_diversity_weight: float = 0.0,
     feature_names: list[str] | None = None,
 ) -> list[dict[str, object]]:
-    """Selecciona por `score_raw` aplicando penalización espacial dinámica."""
+    """
+    Selecciona iterativamente por `score_raw` con penalización espacial dinámica.
+
+    Modifica los registros elegidos con rango, penalizaciones y `score_final`, y
+    retorna la selección en orden.
+    """
     available = list(records)
     selected: list[dict[str, object]] = []
     feature_names = feature_names or []

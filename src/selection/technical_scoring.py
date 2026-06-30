@@ -58,7 +58,7 @@ V3_CRITICAL_NUMERIC_FIELDS = [
 
 
 def format_float(value: object) -> str:
-    """Formatea un valor numérico con la precisión usada en los manifiestos."""
+    """Formatea un valor con los seis decimales usados en los manifiestos."""
     return f"{float(value):.6f}"
 
 
@@ -92,6 +92,7 @@ def select_candidates_to_score(
 
 
 def _compute_v3_raw_features(patch_image: object, *, feature_size: int) -> dict[str, float]:
+    """Calcula tejido, señales RGB/HED, entropía, nitidez y artefactos de un patch."""
     hed_features = compute_patch_features(
         rgb_patch=patch_image,
         feature_size=feature_size,
@@ -114,10 +115,12 @@ def _compute_v3_raw_features(patch_image: object, *, feature_size: int) -> dict[
 
 
 def _clip01(value: float) -> float:
+    """Restringe un valor al intervalo cerrado [0, 1]."""
     return float(max(0.0, min(1.0, value)))
 
 
 def _usefulness_reason(record: dict[str, object]) -> str:
+    """Identifica el componente dominante del score técnico de utilidad."""
     residual = safe_float(record.get("residual_candidate_proxy"))
     treated = safe_float(record.get("low_cellularity_treated_bed_proxy"))
     heterogeneity = safe_float(record.get("heterogeneity_score"))
@@ -245,7 +248,11 @@ def candidate_record_from_patch(
 
 
 def update_candidate_row_from_record(row: dict[str, object], record: dict[str, object]) -> None:
-    """Copia el scoring calculado al manifiesto del pool común."""
+    """
+    Copia features, scores, región y rango al manifiesto del pool común.
+
+    La fila se modifica directamente y no se crea un identificador nuevo.
+    """
     fields_to_copy = [
         "width",
         "height",
@@ -288,7 +295,11 @@ def sanitize_numeric_fields(
     records: list[dict[str, object]],
     field_names: list[str],
 ) -> list[str]:
-    """Reemplaza valores críticos no finitos por cero e informa cada reparación."""
+    """
+    Reemplaza valores críticos no finitos por cero.
+
+    Retorna una advertencia técnica por cada campo reparado.
+    """
     warnings: list[str] = []
     for field_name in field_names:
         repaired_count = 0
@@ -308,7 +319,7 @@ def sanitize_numeric_fields(
 
 
 def score_statistics(records: list[dict[str, object]], field_name: str) -> dict[str, float | None]:
-    """Resume media, mínimo y máximo de un score finito."""
+    """Retorna media, mínimo y máximo de los valores finitos de un score."""
     values = [safe_float(record.get(field_name), math.nan) for record in records]
     values = [value for value in values if math.isfinite(value)]
     if not values:
@@ -317,7 +328,7 @@ def score_statistics(records: list[dict[str, object]], field_name: str) -> dict[
 
 
 def selected_mean(selected_rows: list[dict[str, object]], field_name: str) -> float | None:
-    """Calcula la media finita de un campo en los patches seleccionados."""
+    """Calcula la media finita de un campo o retorna `None` si no hay valores."""
     values = [safe_float(row.get(field_name), math.nan) for row in selected_rows]
     values = [value for value in values if math.isfinite(value)]
     return float(sum(values) / len(values)) if values else None

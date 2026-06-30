@@ -38,7 +38,17 @@ def save_wsi_patch_selection_preview(
     slide_dimensions: tuple[int, int],
     output_path: Path,
 ) -> Path:
-    """Guarda un thumbnail con los rectángulos de los patches evaluados."""
+    """
+    ***
+    * thumbnail: Vista reducida RGB de la WSI.
+    * candidate_rows: Candidatos evaluados con coordenadas y estado de selección.
+    * slide_dimensions: Dimensiones originales de la WSI.
+    * output_path: Ruta de la preview.
+    ***
+    Escala las coordenadas al thumbnail, dibuja los rectángulos y guarda la imagen.
+
+    Retorna la ruta de la preview generada.
+    """
     boxes = [
         _row_to_patch_box(
             row=row,

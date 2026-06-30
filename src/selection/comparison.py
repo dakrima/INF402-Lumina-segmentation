@@ -111,16 +111,19 @@ class ComparisonConfig:
 
 
 def _utc_now_iso() -> str:
+    """Retorna un timestamp UTC ISO-8601 para el resumen de comparación."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _resolve_path(path: Path, root_dir: Path) -> Path:
+    """Resuelve rutas relativas respecto de la raíz del repositorio."""
     if path.is_absolute():
         return path.expanduser().resolve()
     return (root_dir / path).resolve()
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Indica si una ruta se encuentra dentro de otra."""
     try:
         path.relative_to(parent)
     except ValueError:
@@ -129,6 +132,7 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> None:
+    """Valida y prepara una carpeta de comparación sin borrar rutas críticas."""
     resolved_output = output_dir.resolve()
     resolved_root = root_dir.resolve()
     if resolved_output.exists() and any(child.name != ".gitkeep" for child in resolved_output.iterdir()):
@@ -153,22 +157,26 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
 
 
 def _read_json(path: Path) -> dict[str, Any]:
+    """Lee un archivo JSON y retorna su objeto raíz."""
     with path.open(encoding="utf-8") as file:
         return json.load(file)
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
+    """Lee un CSV completo y retorna sus filas como diccionarios."""
     with path.open(newline="", encoding="utf-8") as file:
         return list(csv.DictReader(file))
 
 
 def _write_json(payload: dict[str, Any], path: Path) -> Path:
+    """Guarda JSON indentado y retorna la ruta generada."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
 
 def _write_csv(rows: list[dict[str, object]], path: Path, fieldnames: list[str]) -> Path:
+    """Guarda filas con columnas estables y retorna la ruta del CSV."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
@@ -178,6 +186,7 @@ def _write_csv(rows: list[dict[str, object]], path: Path, fieldnames: list[str])
 
 
 def _validate_result_dir(result_dir: Path) -> None:
+    """Comprueba que una corrida contenga manifests, configuración y patches."""
     if not result_dir.exists():
         raise FileNotFoundError(f"Selector output directory does not exist: {result_dir}")
     for file_name in REQUIRED_RESULT_FILES:
@@ -191,7 +200,15 @@ def _validate_result_dir(result_dir: Path) -> None:
 
 
 def load_selector_run(label: str, directory: Path) -> SelectorRun:
-    """Carga y valida los manifiestos requeridos de un selector."""
+    """
+    ***
+    * label: Etiqueta interna usada en la comparación.
+    * directory: Carpeta generada por un selector.
+    ***
+    Valida y carga summary, configuración, candidatos y patches seleccionados.
+
+    Retorna una representación inmutable de la corrida.
+    """
     _validate_result_dir(directory)
     return SelectorRun(
         label=label,
@@ -204,6 +221,7 @@ def load_selector_run(label: str, directory: Path) -> SelectorRun:
 
 
 def _to_float(value: object) -> float | None:
+    """Convierte un valor finito a `float` o retorna `None`."""
     if value in ("", None):
         return None
     try:
@@ -216,6 +234,7 @@ def _to_float(value: object) -> float | None:
 
 
 def _to_int(value: object) -> int | None:
+    """Convierte texto o número a entero o retorna `None`."""
     number = _to_float(value)
     if number is None:
         return None
@@ -223,15 +242,18 @@ def _to_int(value: object) -> int | None:
 
 
 def _candidate_key_from_xy(x_level0: object, y_level0: object) -> str:
+    """Construye la clave estable `x_y` usada para comparar coordenadas."""
     return f"x{int(float(x_level0))}_y{int(float(y_level0))}"
 
 
 def _selector_title(run: SelectorRun) -> str:
+    """Obtiene el nombre persistido del selector de una corrida."""
     selector = run.summary.get("selector") or run.method_config.get("selector")
     return str(selector or run.label)
 
 
 def _candidate_lookup_by_xy(candidate_rows: list[dict[str, str]]) -> dict[tuple[int, int], str]:
+    """Indexa IDs de candidatos por sus coordenadas de nivel 0."""
     lookup: dict[tuple[int, int], str] = {}
     for row in candidate_rows:
         x_level0 = _to_int(row.get("x_level0"))
@@ -244,6 +266,7 @@ def _candidate_lookup_by_xy(candidate_rows: list[dict[str, str]]) -> dict[tuple[
 
 
 def _selected_records(run: SelectorRun) -> list[dict[str, object]]:
+    """Normaliza las filas seleccionadas para cálculos comparativos."""
     candidate_by_xy = _candidate_lookup_by_xy(run.candidate_rows)
     records: list[dict[str, object]] = []
     for row in run.selected_rows:
@@ -275,6 +298,7 @@ def _selected_records(run: SelectorRun) -> list[dict[str, object]]:
 
 
 def _candidate_pool_keys(run: SelectorRun) -> set[str]:
+    """Retorna las claves canónicas del pool de candidatos."""
     keys: set[str] = set()
     for row in run.candidate_rows:
         candidate_id = row.get("candidate_id")
@@ -289,6 +313,7 @@ def _candidate_pool_keys(run: SelectorRun) -> set[str]:
 
 
 def _candidate_pool_coordinates(run: SelectorRun) -> list[tuple[int, int, int, int]]:
+    """Retorna la geometría ordenada del pool para validar igualdad exacta."""
     coordinates: list[tuple[int, int, int, int]] = []
     for row in run.candidate_rows:
         x_level0 = _to_int(row.get("x_level0"))
@@ -301,7 +326,11 @@ def _candidate_pool_coordinates(run: SelectorRun) -> list[tuple[int, int, int, i
 
 
 def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[dict[str, Any], list[str]]:
-    """Valida parámetros y pool comunes, y retorna advertencias técnicas."""
+    """
+    Compara presupuesto, tamaño, stride, semilla, máscara y pool de candidatos.
+
+    Retorna las comprobaciones de igualdad y advertencias técnicas ante diferencias.
+    """
     warnings: list[str] = []
     shared_config: dict[str, Any] = {}
     for field_name in SHARED_CONFIG_FIELDS:
@@ -358,6 +387,7 @@ def compute_overlap_metrics(
     baseline_records: list[dict[str, object]],
     smart_records: list[dict[str, object]],
 ) -> tuple[dict[str, Any], list[dict[str, object]]]:
+    """Calcula intersección de coordenadas y retorna métricas y filas de solapamiento."""
     baseline_by_key = {str(row["candidate_key"]): row for row in baseline_records}
     smart_by_key = {str(row["candidate_key"]): row for row in smart_records}
     baseline_keys = set(baseline_by_key)
@@ -394,6 +424,7 @@ def compute_overlap_metrics(
 
 
 def _stats(values: list[float]) -> dict[str, float | None]:
+    """Resume media, mediana, extremos y desviación poblacional de una lista."""
     if not values:
         return {
             "mean": None,
@@ -415,6 +446,7 @@ def _method_feature_stats(
     rows: list[dict[str, object]],
     feature_names: list[str],
 ) -> dict[str, dict[str, float | None]]:
+    """Agrupa estadísticos por feature recomputada para un método."""
     result: dict[str, dict[str, float | None]] = {}
     for feature_name in feature_names:
         values = [
@@ -426,10 +458,12 @@ def _method_feature_stats(
 
 
 def _selected_metadata_stats(run: SelectorRun, field_names: list[str]) -> dict[str, dict[str, float | None]]:
+    """Resume campos numéricos ya persistidos en la selección."""
     return _method_feature_stats(run.selected_rows, field_names)
 
 
 def _selected_cluster_metrics(run: SelectorRun) -> dict[str, float | None]:
+    """Calcula cobertura y entropía normalizada de clusters seleccionados."""
     cluster_ids = [
         str(row.get("embedding_cluster_id", ""))
         for row in run.selected_rows
@@ -454,6 +488,7 @@ def _selected_cluster_metrics(run: SelectorRun) -> dict[str, float | None]:
 
 
 def _embedding_distance_metrics(run: SelectorRun) -> dict[str, float | None]:
+    """Calcula distancias UNI si la corrida conserva un cache compatible."""
     empty = {
         "mean_pairwise_embedding_distance": None,
         "median_pairwise_embedding_distance": None,
@@ -531,7 +566,11 @@ def recompute_selected_patch_features(
     feature_size: int,
     recompute: bool,
 ) -> list[dict[str, object]]:
-    """Recalcula features leyendo un PNG seleccionado a la vez."""
+    """
+    Recalcula las features comparables leyendo un PNG seleccionado a la vez.
+
+    Conserva los campos persistidos y retorna una fila por patch y método.
+    """
     rows: list[dict[str, object]] = []
     selected_dir = run.directory / "selected"
     for record in records:
@@ -586,6 +625,7 @@ def recompute_selected_patch_features(
 
 
 def _pairwise_distances(records: list[dict[str, object]]) -> list[float]:
+    """Calcula una vez cada distancia euclidiana entre centros de patches."""
     distances: list[float] = []
     centers = []
     for row in records:
@@ -606,6 +646,7 @@ def compute_spatial_metrics(
     records: list[dict[str, object]],
     summary: dict[str, Any],
 ) -> dict[str, float | None]:
+    """Calcula distancias y cobertura espacial aproximada de una selección."""
     distances = _pairwise_distances(records)
     nearest_distances: list[float] = []
     for row in records:
@@ -669,6 +710,7 @@ def _metric_row(
     higher_is_better: bool | None,
     interpretation: str,
 ) -> dict[str, object]:
+    """Construye una fila comparable con valores, diferencia y dirección esperada."""
     baseline_float = _to_float(baseline_value)
     smart_float = _to_float(smart_value)
     delta = (
@@ -700,6 +742,7 @@ def build_comparison_metrics_rows(
     spatial_metrics: dict[str, Any],
     optional_selector_metrics: dict[str, Any],
 ) -> list[dict[str, object]]:
+    """Combina métricas técnicas, espaciales y opcionales en filas estables."""
     rows: list[dict[str, object]] = []
     count_metrics = [
         "num_candidates_generated",
@@ -881,6 +924,7 @@ def build_comparison_metrics_rows(
 
 
 def _format_float(value: object, digits: int = 3) -> str:
+    """Formatea un número opcional para las etiquetas de previews."""
     number = _to_float(value)
     if number is None:
         return "n/a"
@@ -892,10 +936,12 @@ def _feature_mean(
     method: str,
     feature_name: str,
 ) -> float | None:
+    """Obtiene la media de una feature para uno de los métodos."""
     return feature_metrics.get(method, {}).get(feature_name, {}).get("mean")
 
 
 def _preview_nuclear_feature(feature_metrics: dict[str, Any]) -> tuple[str, str]:
+    """Selecciona el proxy nuclear disponible y su etiqueta visual."""
     if "nuclear_signal_hed_recomputed" in feature_metrics.get("smart", {}):
         return "nuclear_signal_hed_recomputed", "mean nuclear HED"
     return "nuclear_signal_recomputed", "mean nuclear"
@@ -905,6 +951,7 @@ def _preview_footer_lines(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
 ) -> list[str]:
+    """Construye las líneas de métricas incluidas al pie de la preview."""
     nuclear_feature, nuclear_label = _preview_nuclear_feature(feature_metrics)
     baseline_features = feature_metrics["baseline"]
     smart_features = feature_metrics["smart"]
@@ -930,12 +977,14 @@ def _preview_footer_lines(
 
 
 def _resize_to_height(image: Image.Image, height: int) -> Image.Image:
+    """Redimensiona una imagen conservando su relación de aspecto."""
     ratio = height / image.height
     width = max(1, int(round(image.width * ratio)))
     return image.resize((width, height), getattr(Image, "Resampling", Image).BILINEAR)
 
 
 def _slide_dimensions(run: SelectorRun, records: list[dict[str, object]]) -> tuple[float, float]:
+    """Obtiene dimensiones de WSI y usa metadata de filas como fallback."""
     slide_width = _to_float(run.summary.get("slide_width"))
     slide_height = _to_float(run.summary.get("slide_height"))
     if slide_width and slide_height:
@@ -970,6 +1019,7 @@ def _slide_dimensions(run: SelectorRun, records: list[dict[str, object]]) -> tup
 
 
 def _blank_slide_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -> Image.Image:
+    """Crea un lienzo proporcional cuando no es posible abrir la WSI."""
     slide_width, slide_height = _slide_dimensions(run, records)
     thumbnail_max_size = (
         _to_int(run.summary.get("thumbnail_max_size"))
@@ -987,6 +1037,7 @@ def _blank_slide_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -
 
 
 def _load_clean_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -> Image.Image:
+    """Carga un thumbnail limpio de la WSI o utiliza el lienzo de respaldo."""
     wsi_path = run.summary.get("wsi_path") or run.method_config.get("wsi_path")
     if wsi_path:
         resolved_wsi_path = Path(str(wsi_path)).expanduser()
@@ -1015,6 +1066,7 @@ def _draw_selected_boxes_on_thumbnail(
     run: SelectorRun,
     records: list[dict[str, object]],
 ) -> Image.Image:
+    """Dibuja las cajas de los patches seleccionados sobre un thumbnail."""
     slide_width, slide_height = _slide_dimensions(run, records)
     scale_x = thumbnail.width / max(slide_width, 1.0)
     scale_y = thumbnail.height / max(slide_height, 1.0)
@@ -1037,7 +1089,7 @@ def save_comparison_preview(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
 ) -> Path:
-    """Crea una preview lado a lado desde las previews de ambos métodos."""
+    """Crea una preview lado a lado y retorna la ruta de la imagen guardada."""
     target_height = 760
     title_height = 56
     footer_height = 100
@@ -1084,7 +1136,7 @@ def save_selected_only_comparison_preview(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
 ) -> Path:
-    """Crea una preview lado a lado mostrando solo los patches elegidos."""
+    """Crea una preview de ambas WSI mostrando solo los patches seleccionados."""
     target_height = 760
     title_height = 56
     footer_height = 100

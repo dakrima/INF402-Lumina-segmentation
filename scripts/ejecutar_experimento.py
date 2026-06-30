@@ -68,6 +68,12 @@ CORE_METRICS = {
 
 
 def parse_args() -> argparse.Namespace:
+    """
+    Construye el parser de argumentos del experimento.
+
+    Retorna el namespace con las rutas de WSI, resultados y checkpoint UNI, además
+    de las opciones de sobrescritura y autocomprobación.
+    """
     parser = argparse.ArgumentParser(
         description="Ejecuta el experimento INF402 sobre nueve WSI con concurrencia acotada.",
     )
@@ -81,7 +87,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def case_id_from_path(path: Path) -> str:
-    """Obtiene el identificador TCGA utilizado en la corrida original."""
+    """
+    ***
+    * path: Ruta de una WSI cuyo nombre contiene el identificador del caso.
+    ***
+    Obtiene el identificador persistido usando los tres primeros componentes del
+    nombre separados por guiones.
+
+    Retorna el identificador usado en carpetas, manifiestos y hashes.
+    """
     parts = path.name.split("-")
     if len(parts) < 3:
         raise ValueError(f"No se pudo obtener el identificador TCGA desde {path.name}.")
@@ -89,6 +103,16 @@ def case_id_from_path(path: Path) -> str:
 
 
 def _atomic_json(payload: dict[str, Any], path: Path) -> None:
+    """
+    ***
+    * payload: Contenido serializable que será guardado.
+    * path: Ruta final del archivo JSON.
+    ***
+    Escribe primero un archivo temporal y lo reemplaza de forma atómica para evitar
+    manifiestos incompletos si el proceso se interrumpe.
+
+    La función crea la carpeta de destino y no retorna ningún valor.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text(
@@ -99,9 +123,15 @@ def _atomic_json(payload: dict[str, Any], path: Path) -> None:
 
 
 class MemoryMonitor:
-    """Registra memoria del proceso y swap mientras se procesan las WSI. Esto me va a servir para cachar si se me va a morir el proceso por falta de memoria"""
+    """
+    Registra el consumo de memoria y swap mientras se procesan las WSI.
+
+    La información permite detectar presión de memoria y reducir la concurrencia
+    cuando sea necesario.
+    """
 
     def __init__(self, interval_seconds: float = 2.0) -> None:
+        """Inicializa el monitor con el intervalo de muestreo indicado en segundos."""
         self.interval_seconds = interval_seconds
         self.process = psutil.Process(os.getpid())
         self.lock = threading.Lock()
@@ -120,14 +150,17 @@ class MemoryMonitor:
         self.gate_min_available_mb = self.min_available_mb
 
     def start(self) -> None:
+        """Inicia el hilo de muestreo en segundo plano."""
         self.thread.start()
 
     def stop(self) -> None:
+        """Detiene el hilo y registra una última muestra."""
         self.stop_event.set()
         self.thread.join(timeout=self.interval_seconds * 2)
         self._sample()
 
     def activate(self, case_id: str) -> None:
+        """Inicia las estadísticas de memoria asociadas a una WSI."""
         with self.lock:
             self.active_cases.add(case_id)
             self.case_stats[case_id] = {
@@ -138,6 +171,7 @@ class MemoryMonitor:
             }
 
     def deactivate(self, case_id: str) -> dict[str, float]:
+        """Cierra el monitoreo del caso y retorna sus estadísticas redondeadas."""
         self._sample()
         with self.lock:
             self.active_cases.discard(case_id)
@@ -151,6 +185,7 @@ class MemoryMonitor:
             return {key: round(value, 3) for key, value in stats.items()}
 
     def reset_gate(self) -> None:
+        """Reinicia la ventana usada para decidir si continúa la concurrencia."""
         self._sample()
         with self.lock:
             self.gate_swap_baseline_mb = self.current_swap_mb
@@ -158,6 +193,7 @@ class MemoryMonitor:
             self.gate_min_available_mb = psutil.virtual_memory().available / MIB
 
     def gate_summary(self) -> dict[str, float | bool]:
+        """Resume presión de memoria desde el último reinicio de la ventana."""
         with self.lock:
             swap_delta = max(0.0, self.gate_peak_swap_mb - self.gate_swap_baseline_mb)
             return {
@@ -169,6 +205,7 @@ class MemoryMonitor:
             }
 
     def summary(self) -> dict[str, float | int]:
+        """Retorna el resumen de memoria de toda la ejecución."""
         with self.lock:
             return {
                 "samples": self.samples,
@@ -181,10 +218,12 @@ class MemoryMonitor:
             }
 
     def _run(self) -> None:
+        """Muestrea periódicamente hasta recibir la señal de detención."""
         while not self.stop_event.wait(self.interval_seconds):
             self._sample()
 
     def _sample(self) -> None:
+        """Actualiza estadísticas globales y de cada caso activo bajo un lock."""
         rss_mb = self.process.memory_info().rss / MIB
         swap_mb = psutil.swap_memory().used / MIB
         available_mb = psutil.virtual_memory().available / MIB
@@ -204,7 +243,15 @@ class MemoryMonitor:
 
 
 def baseline_config(wsi_path: Path, output_dir: Path) -> BaselineSelectionConfig:
-    """Construye la configuración del baseline."""
+    """
+    ***
+    * wsi_path: Ruta de la WSI que será procesada.
+    * output_dir: Carpeta donde se guardará la selección baseline.
+    ***
+    Construye la configuración exacta del baseline utilizada en el experimento.
+
+    Retorna los parámetros fijos de patch, stride, presupuesto, filtro y semilla.
+    """
     return BaselineSelectionConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
@@ -225,7 +272,17 @@ def v41_config(
     uni_model_path: Path,
     batch_size: int,
 ) -> V41MedicalEmbeddingAssistedConfig:
-    """Construye la configuración del selector propuesto."""
+    """
+    ***
+    * wsi_path: Ruta de la WSI que será procesada.
+    * output_dir: Carpeta donde se guardará la selección propuesta.
+    * uni_model_path: Ruta local del checkpoint UNI.
+    * batch_size: Tamaño de lote usado al generar embeddings.
+    ***
+    Construye la configuración exacta del selector propuesto utilizada en el paper.
+
+    Retorna todos los umbrales, pesos y parámetros metodológicos sin modificarlos.
+    """
     return V41MedicalEmbeddingAssistedConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
@@ -269,6 +326,7 @@ def v41_config(
 
 
 def _is_memory_error(exc: BaseException) -> bool:
+    """Indica si una excepción corresponde a falta de memoria reconocible."""
     message = str(exc).lower()
     return isinstance(exc, MemoryError) or "out of memory" in message or "cannot allocate" in message
 
@@ -282,6 +340,21 @@ def run_case(
     batch_size: int,
     monitor: MemoryMonitor,
 ) -> dict[str, Any]:
+    """
+    ***
+    * wsi_path: Ruta de la WSI del caso.
+    * output_root: Carpeta raíz de la corrida.
+    * uni_model_path: Ruta del checkpoint UNI.
+    * embedding_extractor: Extractor UNI compartido entre casos.
+    * batch_size: Tamaño de lote inicial para embeddings.
+    * monitor: Monitor de memoria compartido por el scheduler.
+    ***
+    Genera el pool común, ejecuta ambos métodos, valida su igualdad, calcula la
+    comparación y guarda el estado del caso. Si ocurre un error de memoria con un
+    lote mayor, reintenta el selector propuesto con lote 8.
+
+    Retorna el estado completo del caso, incluidos tiempos, memoria y rutas de salida.
+    """
     case_id = case_id_from_path(wsi_path)
     case_root = output_root / case_id
     baseline_dir = case_root / "baseline"
@@ -407,6 +480,7 @@ def run_case(
 
 
 def _read_metric_rows(path: Path) -> dict[str, dict[str, float | None]]:
+    """Lee las métricas comparativas y convierte sus tres valores numéricos."""
     metrics: dict[str, dict[str, float | None]] = {}
     with path.open(newline="", encoding="utf-8") as csv_file:
         for row in csv.DictReader(csv_file):
@@ -421,6 +495,13 @@ def _read_metric_rows(path: Path) -> dict[str, dict[str, float | None]]:
 
 
 def _distribution(values: list[float]) -> dict[str, float | int | None]:
+    """
+    ***
+    * values: Valores por WSI de una métrica.
+    ***
+    Calcula cantidad, media, desviación estándar, mediana y cuartiles inclusivos.
+    Retorna valores nulos cuando la lista está vacía.
+    """
     if not values:
         return {"n": 0, "mean": None, "sd": None, "median": None, "q1": None, "q3": None}
     q1, _, q3 = statistics.quantiles(values, n=4, method="inclusive") if len(values) > 1 else (values[0], values[0], values[0])
@@ -441,6 +522,17 @@ def write_aggregate_outputs(
     scheduler: dict[str, Any],
     memory: dict[str, Any],
 ) -> dict[str, str]:
+    """
+    ***
+    * case_statuses: Estados y métricas de todos los casos procesados.
+    * output_root: Carpeta raíz de resultados.
+    * scheduler: Estadísticas de concurrencia y tiempos del scheduler.
+    * memory: Resumen global de memoria y swap.
+    ***
+    Agrega las métricas por WSI y genera los CSV, JSON y tabla Markdown finales.
+
+    Retorna las rutas de los cuatro archivos agregados.
+    """
     aggregate_dir = output_root / "aggregate"
     aggregate_dir.mkdir(parents=True, exist_ok=True)
     successful = [status for status in case_statuses if status.get("status") == "completed"]
@@ -561,6 +653,7 @@ def write_aggregate_outputs(
 
 
 def self_check() -> None:
+    """Comprueba que el hash del pool sea estable al reordenar y cambie con su contenido."""
     first = TiatoolboxCandidate("a", 0, 10, 20, 1024, 0)
     second = TiatoolboxCandidate("b", 1, 30, 40, 1024, 1)
     expected = candidate_pool_hash("TCGA-X-Y", [first, second])
@@ -572,6 +665,12 @@ def self_check() -> None:
 
 
 def main() -> int:
+    """
+    Valida entradas, carga UNI una vez y ejecuta los nueve casos con concurrencia
+    condicionada por memoria y aceleración observada en los pilotos.
+
+    Retorna cero si todos los casos terminan correctamente y uno ante fallos.
+    """
     args = parse_args()
     if args.self_check:
         self_check()
@@ -753,6 +852,7 @@ def main() -> int:
     monitor.stop()
     scheduler["uni_model_load_count"] = embedding_extractor_load_count()
     scheduler["total_wall_seconds"] = round(time.perf_counter() - experiment_started, 6)
+    # El orden por caso mantiene los agregados reproducibles entre ejecuciones.
     case_statuses.sort(key=lambda item: item["case_id"])
     memory_summary = monitor.summary()
     outputs = write_aggregate_outputs(

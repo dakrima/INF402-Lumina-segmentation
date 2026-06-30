@@ -24,11 +24,16 @@ REQUIRED_DIRECTORIES = ["data", "results", "src", "scripts"]
 
 
 def _module_version(module: object) -> str:
+    """Retorna la versión informada por un módulo o un texto de respaldo."""
     return str(getattr(module, "__version__", "versión no informada"))
 
 
 def check_imports() -> tuple[list[str], dict[str, object]]:
-    """Importa cada dependencia y retorna los nombres que fallaron."""
+    """
+    Importa cada dependencia requerida por el pipeline.
+
+    Retorna los nombres que fallaron y los módulos importados correctamente.
+    """
     failed: list[str] = []
     imported: dict[str, object] = {}
     print("\nDependencias")
@@ -46,7 +51,13 @@ def check_imports() -> tuple[list[str], dict[str, object]]:
 
 
 def check_device(imported: dict[str, object]) -> None:
-    """Informa los dispositivos disponibles; el experimento original usa CPU."""
+    """
+    ***
+    * imported: Módulos cargados por `check_imports`.
+    ***
+    Informa la disponibilidad de CPU, CUDA y MPS. No modifica la configuración del
+    experimento ni retorna ningún valor.
+    """
     torch_module = imported.get("PyTorch")
     if torch_module is None:
         return
@@ -58,7 +69,12 @@ def check_device(imported: dict[str, object]) -> None:
 
 
 def check_directories(root_dir: Path) -> list[str]:
-    """Retorna las carpetas mínimas ausentes en la raíz del proyecto."""
+    """
+    ***
+    * root_dir: Raíz del repositorio.
+    ***
+    Comprueba las carpetas mínimas y retorna sus rutas relativas cuando están ausentes.
+    """
     missing = [path for path in REQUIRED_DIRECTORIES if not (root_dir / path).is_dir()]
     print("\nCarpetas")
     print("--------")
@@ -68,6 +84,11 @@ def check_directories(root_dir: Path) -> list[str]:
 
 
 def main() -> int:
+    """
+    Ejecuta las comprobaciones de dependencias, dispositivos y carpetas.
+
+    Retorna cero cuando el entorno está completo y uno si falta algún requisito.
+    """
     argparse.ArgumentParser(
         description="Verifica dependencias y carpetas mínimas del experimento INF402."
     ).parse_args()

@@ -41,7 +41,7 @@ TIATOOLBOX_TISSUE_MASK_METHOD = "tiatoolbox_otsu"
 TIATOOLBOX_CANDIDATE_ORDERING = "tiatoolbox_otsu_candidates_seeded_shuffle"
 TIATOOLBOX_CANDIDATE_POOL = "tiatoolbox_otsu_sliding_window_min_mask_ratio"
 TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS = "all_tiatoolbox_otsu_candidates"
-PREVIEW_SHOWS = "selected_candidates"
+PREVIEW_SHOWS = "candidate_pool_with_selected_highlighted"
 @dataclass(frozen=True)
 class TiatoolboxCandidate:
     """Coordenada candidata en nivel 0 generada por TIAToolbox."""
@@ -676,10 +676,7 @@ def run_baseline_selection(
     if thumbnail is not None:
         save_wsi_patch_selection_preview(
             thumbnail=thumbnail,
-            candidate_rows=[
-                row for row in candidate_rows
-                if row["selected"] in (True, "True", "true", "1")
-            ],
+            candidate_rows=candidate_rows,
             slide_dimensions=slide_dimensions,
             output_path=preview_path,
         )

@@ -413,8 +413,7 @@ def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[st
     lines = [
         "# Diversidad morfológica aproximada en el espacio UNI",
         "",
-        "Se analizaron los 16 patches previamente seleccionados por método en cada una de las nueve WSI. "
-        "Todos los embeddings se reutilizaron desde los cachés UNI originales y fueron normalizados por su norma L2 antes de calcular las distancias coseno.",
+        "Se analizaron los 16 patches previamente seleccionados por método en cada una de las nueve WSI. v4.1 corresponde al método propuesto por nosotros. ",
         "",
         "## Comparación agregada",
         "",
@@ -451,7 +450,7 @@ def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[st
     nearest = summary["mean_nearest_neighbor_cosine_distance"]
     lines.extend([
         "",
-        "## Interpretación descriptiva",
+        "## Interpretación de los resultados",
         "",
         f"En la distancia coseno media entre pares, v4.1 obtuvo un valor mayor en "
         f"{pairwise['comparison_counts']['v4_1_greater']} de 9 WSI, mientras que el baseline fue mayor en "
@@ -462,18 +461,6 @@ def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[st
         f"{nearest['comparison_counts']['v4_1_greater']} de 9 WSI, el baseline fue mayor en "
         f"{nearest['comparison_counts']['baseline_greater']} y se observaron {nearest['comparison_counts']['ties']} empates. "
         f"La diferencia pareada media fue {nearest['paired_difference_v4_1_minus_baseline']['mean']:+.6f}.",
-        "",
-        "## Propuesta breve para la sección III",
-        "",
-        f"La diversidad morfológica aproximada se evaluó mediante la distancia coseno entre embeddings UNI de los patches seleccionados. "
-        f"La distancia media entre pares fue {pairwise['baseline']['mean']:.6f} ± {pairwise['baseline']['sd']:.6f} para el baseline y "
-        f"{pairwise['v4_1']['mean']:.6f} ± {pairwise['v4_1']['sd']:.6f} para v4.1, con una diferencia pareada media de "
-        f"{pairwise['paired_difference_v4_1_minus_baseline']['mean']:+.6f}. La distancia media al vecino morfológico más cercano fue "
-        f"{nearest['baseline']['mean']:.6f} ± {nearest['baseline']['sd']:.6f} y {nearest['v4_1']['mean']:.6f} ± "
-        f"{nearest['v4_1']['sd']:.6f}, respectivamente, con una diferencia pareada media de "
-        f"{nearest['paired_difference_v4_1_minus_baseline']['mean']:+.6f}. Estos resultados son descriptivos y corresponden "
-        "exclusivamente a la diversidad aproximada en el espacio de representaciones de UNI.",
-        "",
     ])
     return "\n".join(lines)
 

@@ -623,9 +623,8 @@ def write_aggregate_outputs(
 
     paper_path = aggregate_dir / "paper_results.md"
     lines = [
-        "# Resultados técnicos de selección de patches",
+        "# Resultados de la selección de patches",
         "",
-        f"Se completaron {len(successful)} de {len(case_statuses)} WSI.",
         "| Métrica | Baseline (media ± DE) | v4.1 (media ± DE) | Diferencia pareada media |",
         "|---|---:|---:|---:|",
     ]
@@ -639,8 +638,6 @@ def write_aggregate_outputs(
     lines.extend(
         [
             "",
-            "Los tiempos separan la generación común de candidatos del costo incremental de cada selector.",
-            "Las WSI se procesaron en nivel 0; las diferencias de MPP deben considerarse una limitación.",
         ]
     )
     paper_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

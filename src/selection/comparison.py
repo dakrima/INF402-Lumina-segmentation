@@ -83,6 +83,8 @@ SHARED_CONFIG_FIELDS = [
     "candidate_pool",
     "candidate_metadata_semantics",
     "num_candidate_rows_written",
+    "candidate_pool_count",
+    "candidate_pool_hash",
 ]
 
 
@@ -109,6 +111,7 @@ class ComparisonConfig:
     feature_size: int = 256
     overwrite: bool = False
     recompute_selected_features: bool = True
+    require_exact_candidate_pool: bool = False
 
 
 def _utc_now_iso() -> str:
@@ -289,6 +292,18 @@ def _candidate_pool_keys(run: SelectorRun) -> set[str]:
     return keys
 
 
+def _candidate_pool_coordinates(run: SelectorRun) -> list[tuple[int, int, int, int]]:
+    coordinates: list[tuple[int, int, int, int]] = []
+    for row in run.candidate_rows:
+        x_level0 = _to_int(row.get("x_level0"))
+        y_level0 = _to_int(row.get("y_level0"))
+        patch_size = _to_int(row.get("patch_size")) or _to_int(run.summary.get("patch_size"))
+        if x_level0 is None or y_level0 is None or patch_size is None:
+            continue
+        coordinates.append((x_level0, y_level0, 0, patch_size))
+    return sorted(coordinates)
+
+
 def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[dict[str, Any], list[str]]:
     """Validate shared experimental settings and return warnings."""
     warnings: list[str] = []
@@ -319,6 +334,27 @@ def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[d
         warnings.append(
             "Candidate pool keys differ between methods; comparison may not use the same pool."
         )
+    baseline_hash = baseline.summary.get("candidate_pool_hash")
+    smart_hash = smart.summary.get("candidate_pool_hash")
+    hash_matches = bool(baseline_hash) and baseline_hash == smart_hash
+    shared_config["candidate_pool_hash_exact"] = {
+        "baseline": baseline_hash,
+        "smart": smart_hash,
+        "matches": hash_matches,
+    }
+    if not hash_matches:
+        warnings.append("Candidate pool SHA-256 hashes are missing or differ between methods.")
+
+    baseline_coordinates = _candidate_pool_coordinates(baseline)
+    smart_coordinates = _candidate_pool_coordinates(smart)
+    coordinates_match = baseline_coordinates == smart_coordinates
+    shared_config["candidate_pool_coordinates_exact"] = {
+        "baseline_count": len(baseline_coordinates),
+        "smart_count": len(smart_coordinates),
+        "matches": coordinates_match,
+    }
+    if not coordinates_match:
+        warnings.append("Candidate pool coordinates differ between methods.")
     return shared_config, warnings
 
 
@@ -1198,6 +1234,13 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
     baseline = load_selector_run("baseline", baseline_dir)
     smart = load_selector_run("smart", smart_dir)
     shared_config, validation_warnings = validate_shared_config(baseline, smart)
+    if config.require_exact_candidate_pool:
+        hash_matches = shared_config["candidate_pool_hash_exact"]["matches"]
+        coordinates_match = shared_config["candidate_pool_coordinates_exact"]["matches"]
+        if not hash_matches or not coordinates_match:
+            raise ValueError(
+                "Exact shared candidate pool validation failed; comparison is invalid."
+            )
 
     baseline_records = _selected_records(baseline)
     smart_records = _selected_records(smart)

@@ -34,6 +34,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate the comparison output directory.",
     )
+    parser.add_argument(
+        "--require-exact-candidate-pool",
+        action="store_true",
+        help="Fail unless candidate coordinates and SHA-256 hash match exactly.",
+    )
     return parser.parse_args()
 
 
@@ -54,6 +59,7 @@ def main() -> int:
         feature_size=args.feature_size,
         overwrite=args.overwrite,
         recompute_selected_features=args.recompute_selected_features,
+        require_exact_candidate_pool=args.require_exact_candidate_pool,
     )
 
     print("Patch selector comparison")

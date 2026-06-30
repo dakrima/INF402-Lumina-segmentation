@@ -27,6 +27,7 @@ from src.selection.diversity import (
     proximity_penalty,
 )
 from src.selection.embedding_scoring import (
+    PatchEmbeddingExtractor,
     UNI_BACKEND_MISSING_MESSAGE,
     cosine_distance_to_selected,
     load_embedding_cache,
@@ -62,12 +63,14 @@ from src.selection.tiatoolbox_baseline import (
     TIATOOLBOX_EXTRACTOR_NAME,
     TIATOOLBOX_INPUT_MASK,
     TIATOOLBOX_TISSUE_MASK_METHOD,
+    SharedCandidatePool,
     _base_slide_metadata,
     _build_tiatoolbox_extractor,
     _candidate_pool_row as _tiatoolbox_candidate_pool_row,
     _candidates_from_extractor,
     _prepare_output_dir,
     _resolve_output_dir,
+    candidate_pool_hash,
 )
 from src.selection.v3_server_quality import (
     NO_MODEL_SELECTION_NOTE,
@@ -453,6 +456,7 @@ def _load_or_compute_embeddings_v41(
     config: V41MedicalEmbeddingAssistedConfig,
     output_dir: Path,
     warnings: list[str],
+    embedding_extractor: PatchEmbeddingExtractor | None = None,
 ) -> tuple[np.ndarray, bool, Path, Path]:
     candidate_ids = [candidate.candidate_id for candidate in candidates_to_score]
     cache_path, metadata_path = _embedding_cache_paths(config, output_dir)
@@ -482,6 +486,7 @@ def _load_or_compute_embeddings_v41(
         slide=slide,
         candidates=candidates_to_score,
         config=config,
+        embedding_extractor=embedding_extractor,
     )
     write_cache_path = cache_path
     write_metadata_path = metadata_path
@@ -908,6 +913,9 @@ def _select_v41_records(
 
 def run_v4_1_medical_embedding_assisted_selection(
     config: V41MedicalEmbeddingAssistedConfig,
+    *,
+    shared_pool: SharedCandidatePool | None = None,
+    embedding_extractor: PatchEmbeddingExtractor | None = None,
 ) -> dict[str, Any]:
     """Run v4_1_medical_embedding_assisted and write selector-compatible outputs."""
     start_time = time.perf_counter()
@@ -934,24 +942,48 @@ def run_v4_1_medical_embedding_assisted_selection(
     scored_candidates_path = output_dir / SCORED_CANDIDATES_FILE
     cluster_summary_path = output_dir / EMBEDDING_CLUSTER_SUMMARY_FILE
 
-    extractor, tiatoolbox_version = _build_tiatoolbox_extractor(
-        wsi_path=wsi_path,
-        config=config,
-    )
+    candidate_generation_started = time.perf_counter()
+    if shared_pool is None:
+        extractor, tiatoolbox_version = _build_tiatoolbox_extractor(
+            wsi_path=wsi_path,
+            config=config,
+        )
+        candidates = _candidates_from_extractor(
+            extractor=extractor,
+            patch_size=config.patch_size,
+        )
+        pool_hash = candidate_pool_hash(wsi_path.stem, candidates)
+        candidate_generation_seconds = round(
+            time.perf_counter() - candidate_generation_started,
+            6,
+        )
+    else:
+        if shared_pool.wsi_path != wsi_path:
+            raise ValueError("Shared candidate pool belongs to a different WSI.")
+        extractor = None
+        tiatoolbox_version = shared_pool.tiatoolbox_version
+        candidates = list(shared_pool.candidates)
+        pool_hash = shared_pool.candidate_pool_hash
+        candidate_generation_seconds = shared_pool.candidate_generation_seconds
     _prepare_output_dir(
         output_dir=output_dir,
         root_dir=root_dir,
         overwrite=config.overwrite,
     )
-    write_json_manifest(
-        _method_config(
-            config,
-            min_distance_level0=min_distance_level0,
-            embedding_cache_path=embedding_cache_path,
-            tiatoolbox_version=tiatoolbox_version,
-        ),
-        method_config_path,
+    method_config = _method_config(
+        config,
+        min_distance_level0=min_distance_level0,
+        embedding_cache_path=embedding_cache_path,
+        tiatoolbox_version=tiatoolbox_version,
     )
+    method_config.update(
+        {
+            "candidate_pool_hash": pool_hash,
+            "candidate_pool_count": len(candidates),
+            "candidate_generation_seconds": candidate_generation_seconds,
+        }
+    )
+    write_json_manifest(method_config, method_config_path)
 
     openslide_module = _import_openslide()
     slide = openslide_module.OpenSlide(str(wsi_path))
@@ -964,10 +996,6 @@ def run_v4_1_medical_embedding_assisted_selection(
         thumbnail = slide.get_thumbnail(
             (config.thumbnail_max_size, config.thumbnail_max_size)
         ).convert("RGB")
-        candidates = _candidates_from_extractor(
-            extractor=extractor,
-            patch_size=config.patch_size,
-        )
         num_candidates_generated = len(candidates)
         candidates_to_score = _select_candidates_to_score(
             candidates,
@@ -988,6 +1016,7 @@ def run_v4_1_medical_embedding_assisted_selection(
             for row in candidate_rows
         }
 
+        feature_started = time.perf_counter()
         scored_records: list[dict[str, object]] = []
         for candidate in candidates_to_score:
             patch_image = slide.read_region(
@@ -1011,6 +1040,13 @@ def run_v4_1_medical_embedding_assisted_selection(
             candidates_to_score=candidates_to_score,
             config=config,
         )
+        v41_feature_seconds = round(time.perf_counter() - feature_started, 6)
+        wait_before = (
+            embedding_extractor.current_thread_wait_seconds()
+            if embedding_extractor is not None
+            else 0.0
+        )
+        embedding_started = time.perf_counter()
         embeddings, embedding_cache_used, embedding_cache_path, embedding_cache_metadata_path = (
             _load_or_compute_embeddings_v41(
                 slide=slide,
@@ -1018,8 +1054,20 @@ def run_v4_1_medical_embedding_assisted_selection(
                 config=config,
                 output_dir=output_dir,
                 warnings=warnings,
+                embedding_extractor=embedding_extractor,
             )
         )
+        uni_embedding_seconds = round(time.perf_counter() - embedding_started, 6)
+        uni_lock_wait_seconds = round(
+            (
+                embedding_extractor.current_thread_wait_seconds()
+                if embedding_extractor is not None
+                else 0.0
+            )
+            - wait_before,
+            6,
+        )
+        rerank_started = time.perf_counter()
         embedding_stats, embedding_warnings = _apply_embedding_metrics(
             records=scored_records,
             embeddings=embeddings,
@@ -1122,6 +1170,11 @@ def run_v4_1_medical_embedding_assisted_selection(
             field_name: _score_statistics(scored_records, field_name)
             for field_name in score_fields
         }
+        v41_rerank_seconds = round(time.perf_counter() - rerank_started, 6)
+        v41_incremental_seconds = round(
+            v41_feature_seconds + uni_embedding_seconds + v41_rerank_seconds,
+            6,
+        )
         summary: dict[str, Any] = {
             "status": "completed_with_warnings" if warnings else "completed",
             "selector": config.selector,
@@ -1173,6 +1226,13 @@ def run_v4_1_medical_embedding_assisted_selection(
             "num_candidates_scored": len(scored_records),
             "num_candidates_evaluated": len(scored_records),
             "num_selected": len(selected_rows),
+            "candidate_pool_hash": pool_hash,
+            "candidate_pool_count": len(candidates),
+            "candidate_generation_seconds": candidate_generation_seconds,
+            "v41_feature_seconds": v41_feature_seconds,
+            "uni_embedding_seconds": uni_embedding_seconds,
+            "uni_lock_wait_seconds": uni_lock_wait_seconds,
+            "v41_rerank_seconds": v41_rerank_seconds,
             "score_statistics": score_statistics,
             "selected_category_counts": selection_stats.get("selected_category_counts", {}),
             "spatial_coverage": {
@@ -1206,7 +1266,11 @@ def run_v4_1_medical_embedding_assisted_selection(
                 "morphology_diversity_score",
             ),
             "mean_score_final_selected": _selected_mean(selected_rows, "score_final"),
-            "runtime_seconds": round(time.perf_counter() - start_time, 3),
+            "runtime_seconds": (
+                v41_incremental_seconds
+                if shared_pool is not None
+                else round(time.perf_counter() - start_time, 6)
+            ),
             "candidate_metadata_csv": str(candidate_metadata_path),
             "selected_metadata_csv": str(selected_metadata_path),
             "scored_candidates_csv": str(scored_candidates_path),

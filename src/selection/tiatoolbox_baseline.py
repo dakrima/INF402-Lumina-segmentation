@@ -7,6 +7,8 @@ export, metadata, summary JSON, method config, and preview.
 
 from __future__ import annotations
 
+import csv
+import hashlib
 import os
 import random
 import time
@@ -60,6 +62,30 @@ class TiatoolboxCandidate:
     y_level0: int
     patch_size: int
     tiatoolbox_index: int
+
+
+@dataclass
+class SharedCandidatePool:
+    """One TIAToolbox/Otsu candidate pool shared by both paper selectors."""
+
+    case_id: str
+    wsi_path: Path
+    candidates: tuple[TiatoolboxCandidate, ...]
+    extractor: object | None
+    tiatoolbox_version: str
+    slide_metadata: dict[str, Any]
+    candidate_pool_hash: str
+    candidate_generation_seconds: float
+
+    def release_extractor(self) -> None:
+        """Release the TIAToolbox WSI handle after baseline patch export."""
+        if self.extractor is None:
+            return
+        wsi = getattr(self.extractor, "wsi", None)
+        close = getattr(wsi, "close", None)
+        if callable(close):
+            close()
+        self.extractor = None
 
 
 @dataclass(frozen=True)
@@ -248,6 +274,122 @@ def _candidates_from_extractor(extractor: object, patch_size: int) -> list[Tiato
     return candidates
 
 
+def canonical_candidate_rows(
+    case_id: str,
+    candidates: tuple[TiatoolboxCandidate, ...] | list[TiatoolboxCandidate],
+) -> list[tuple[str, int, int, int, int]]:
+    """Return canonical rows used for exact pool equality and hashing."""
+    return sorted(
+        (
+            case_id,
+            int(candidate.x_level0),
+            int(candidate.y_level0),
+            0,
+            int(candidate.patch_size),
+        )
+        for candidate in candidates
+    )
+
+
+def candidate_pool_hash(
+    case_id: str,
+    candidates: tuple[TiatoolboxCandidate, ...] | list[TiatoolboxCandidate],
+) -> str:
+    """Hash case id and exact level-0 candidate geometry with SHA-256."""
+    digest = hashlib.sha256()
+    for row in canonical_candidate_rows(case_id, candidates):
+        digest.update((",".join(str(value) for value in row) + "\n").encode("utf-8"))
+    return digest.hexdigest()
+
+
+def generate_shared_candidate_pool(
+    config: BaselineSelectionConfig,
+    *,
+    case_id: str,
+) -> SharedCandidatePool:
+    """Generate the common TIAToolbox/Otsu pool exactly once for one WSI."""
+    started = time.perf_counter()
+    wsi_path = config.wsi_path.expanduser().resolve()
+    extractor, tiatoolbox_version = _build_tiatoolbox_extractor(
+        wsi_path=wsi_path,
+        config=config,
+    )
+    slide_metadata = _slide_metadata_from_extractor(extractor)
+    candidates = tuple(
+        _candidates_from_extractor(
+            extractor=extractor,
+            patch_size=config.patch_size,
+        )
+    )
+    return SharedCandidatePool(
+        case_id=case_id,
+        wsi_path=wsi_path,
+        candidates=candidates,
+        extractor=extractor,
+        tiatoolbox_version=tiatoolbox_version,
+        slide_metadata=slide_metadata,
+        candidate_pool_hash=candidate_pool_hash(case_id, candidates),
+        candidate_generation_seconds=round(time.perf_counter() - started, 6),
+    )
+
+
+def write_shared_candidate_manifest(
+    pool: SharedCandidatePool,
+    output_dir: Path,
+) -> tuple[Path, Path]:
+    """Persist the common pool and its reproducibility metadata."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "shared_candidates.csv"
+    json_path = output_dir / "shared_candidates.json"
+    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+        fieldnames = [
+            "case_id",
+            "generation_order",
+            "candidate_id",
+            "tiatoolbox_index",
+            "x_level0",
+            "y_level0",
+            "level",
+            "patch_size",
+        ]
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        for order, candidate in enumerate(pool.candidates):
+            writer.writerow(
+                {
+                    "case_id": pool.case_id,
+                    "generation_order": order,
+                    "candidate_id": candidate.candidate_id,
+                    "tiatoolbox_index": candidate.tiatoolbox_index,
+                    "x_level0": candidate.x_level0,
+                    "y_level0": candidate.y_level0,
+                    "level": 0,
+                    "patch_size": candidate.patch_size,
+                }
+            )
+    write_json_manifest(
+        {
+            "case_id": pool.case_id,
+            "wsi_path": str(pool.wsi_path),
+            "candidate_pool_hash": pool.candidate_pool_hash,
+            "candidate_pool_hash_algorithm": "sha256",
+            "candidate_pool_hash_fields": [
+                "case_id",
+                "x_level0",
+                "y_level0",
+                "level",
+                "patch_size",
+            ],
+            "candidate_pool_count": len(pool.candidates),
+            "candidate_generation_seconds": pool.candidate_generation_seconds,
+            "level": 0,
+            "patch_size": pool.candidates[0].patch_size if pool.candidates else None,
+        },
+        json_path,
+    )
+    return csv_path, json_path
+
+
 def _patch_image_from_extractor(extractor: object, tiatoolbox_index: int) -> Image.Image:
     patch = extractor[tiatoolbox_index]
     if isinstance(patch, Image.Image):
@@ -381,7 +523,11 @@ def _method_config(
     }
 
 
-def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
+def run_baseline_selection(
+    config: BaselineSelectionConfig,
+    *,
+    shared_pool: SharedCandidatePool | None = None,
+) -> dict[str, Any]:
     """Run the baseline selector and write all required outputs."""
     start_time = time.perf_counter()
     root_dir = config.root_dir.resolve()
@@ -402,23 +548,42 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
     method_config_path = output_dir / "method_config.json"
     preview_path = output_dir / "patch_selection_preview.png"
 
-    extractor, tiatoolbox_version = _build_tiatoolbox_extractor(
-        wsi_path=wsi_path,
-        config=config,
+    if shared_pool is None:
+        generated_pool = generate_shared_candidate_pool(config, case_id=wsi_path.stem)
+        extractor = generated_pool.extractor
+        tiatoolbox_version = generated_pool.tiatoolbox_version
+        slide_metadata = generated_pool.slide_metadata
+        candidates = list(generated_pool.candidates)
+        pool_hash = generated_pool.candidate_pool_hash
+        candidate_generation_seconds = generated_pool.candidate_generation_seconds
+    else:
+        if shared_pool.wsi_path != wsi_path:
+            raise ValueError("Shared candidate pool belongs to a different WSI.")
+        extractor = shared_pool.extractor
+        if extractor is None:
+            raise RuntimeError("Shared TIAToolbox extractor was released before baseline export.")
+        tiatoolbox_version = shared_pool.tiatoolbox_version
+        slide_metadata = shared_pool.slide_metadata
+        candidates = list(shared_pool.candidates)
+        pool_hash = shared_pool.candidate_pool_hash
+        candidate_generation_seconds = shared_pool.candidate_generation_seconds
+    selection_started = time.perf_counter()
+    method_config = _method_config(config, tiatoolbox_version=tiatoolbox_version)
+    method_config.update(
+        {
+            "candidate_pool_hash": pool_hash,
+            "candidate_pool_count": len(candidates),
+            "candidate_generation_seconds": candidate_generation_seconds,
+        }
     )
     write_json_manifest(
-        _method_config(config, tiatoolbox_version=tiatoolbox_version),
+        method_config,
         method_config_path,
     )
 
-    slide_metadata = _slide_metadata_from_extractor(extractor)
     slide_dimensions = (
         int(slide_metadata["slide_width"]),
         int(slide_metadata["slide_height"]),
-    )
-    candidates = _candidates_from_extractor(
-        extractor=extractor,
-        patch_size=config.patch_size,
     )
     ordered_candidates = list(candidates)
     random.Random(config.seed).shuffle(ordered_candidates)
@@ -503,6 +668,7 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
     else:
         preview_warning = "Preview not generated because TIAToolbox thumbnail was unavailable."
 
+    baseline_selection_seconds = round(time.perf_counter() - selection_started, 6)
     summary: dict[str, Any] = {
         "selector": config.selector,
         "wsi_path": str(wsi_path),
@@ -526,7 +692,15 @@ def run_baseline_selection(config: BaselineSelectionConfig) -> dict[str, Any]:
         "mean_tissue_ratio_selected": None,
         "min_tissue_ratio_selected": None,
         "max_tissue_ratio_selected": None,
-        "runtime_seconds": round(time.perf_counter() - start_time, 3),
+        "candidate_pool_hash": pool_hash,
+        "candidate_pool_count": len(candidates),
+        "candidate_generation_seconds": candidate_generation_seconds,
+        "baseline_selection_seconds": baseline_selection_seconds,
+        "runtime_seconds": (
+            baseline_selection_seconds
+            if shared_pool is not None
+            else round(time.perf_counter() - start_time, 6)
+        ),
         "candidate_metadata_csv": str(candidate_metadata_path),
         "selected_metadata_csv": str(selected_metadata_path),
         "method_config_json": str(method_config_path),

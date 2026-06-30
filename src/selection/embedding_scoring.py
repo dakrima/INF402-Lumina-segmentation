@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import math
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -59,6 +61,9 @@ class PatchEmbeddingExtractor:
         self.backend = backend
         self.model_path = model_path
         self.distance_metric = distance_metric
+        self._inference_lock = threading.Lock()
+        self._wait_stats_lock = threading.Lock()
+        self._wait_seconds_by_thread: dict[int, float] = {}
 
     def _preprocess_batch(self, patches: Sequence[Image.Image]) -> object:
         tensors = [
@@ -71,9 +76,17 @@ class PatchEmbeddingExtractor:
         """Return embeddings for a batch of RGB patches."""
         if not patches:
             return np.zeros((0, 0), dtype=np.float32)
-        batch = self._preprocess_batch(patches)
-        with self.torch.no_grad():
-            output = self.model(batch)
+        wait_started = time.perf_counter()
+        with self._inference_lock:
+            wait_seconds = time.perf_counter() - wait_started
+            thread_id = threading.get_ident()
+            with self._wait_stats_lock:
+                self._wait_seconds_by_thread[thread_id] = (
+                    self._wait_seconds_by_thread.get(thread_id, 0.0) + wait_seconds
+                )
+            batch = self._preprocess_batch(patches)
+            with self.torch.no_grad():
+                output = self.model(batch)
         if isinstance(output, (tuple, list)):
             output = output[0]
         if isinstance(output, dict):
@@ -93,6 +106,11 @@ class PatchEmbeddingExtractor:
         if self.distance_metric == "cosine":
             embeddings = normalize_embeddings(embeddings)
         return embeddings.astype(np.float32, copy=False)
+
+    def current_thread_wait_seconds(self) -> float:
+        """Return cumulative time this thread waited for the shared UNI model."""
+        with self._wait_stats_lock:
+            return float(self._wait_seconds_by_thread.get(threading.get_ident(), 0.0))
 
 
 def _import_torch() -> object:
@@ -225,8 +243,7 @@ def _load_uni_model_from_path(
     return model
 
 
-def build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddingExtractor:
-    """Build a patch embedding extractor for the configured backend."""
+def _build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddingExtractor:
     if config.embedding_backend != "uni":
         raise RuntimeError(
             f"Unsupported embedding backend '{config.embedding_backend}'. Only 'uni' is implemented."
@@ -252,6 +269,45 @@ def build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddin
         model_path=config.embedding_model_path.expanduser().resolve(),
         distance_metric=config.embedding_distance_metric,
     )
+
+
+_EMBEDDING_EXTRACTOR_CACHE_LOCK = threading.Lock()
+_EMBEDDING_EXTRACTOR_CACHE: tuple[tuple[str, ...], PatchEmbeddingExtractor] | None = None
+_EMBEDDING_EXTRACTOR_LOAD_COUNT = 0
+
+
+def _embedding_extractor_cache_key(config: EmbeddingExtractorConfig) -> tuple[str, ...]:
+    model_path = (
+        str(config.embedding_model_path.expanduser().resolve())
+        if config.embedding_model_path is not None
+        else ""
+    )
+    return (
+        config.embedding_backend,
+        config.embedding_model_name,
+        model_path,
+        config.embedding_device,
+        config.embedding_distance_metric,
+    )
+
+
+def build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddingExtractor:
+    """Return one process-wide extractor for the configured UNI model."""
+    global _EMBEDDING_EXTRACTOR_CACHE, _EMBEDDING_EXTRACTOR_LOAD_COUNT
+    key = _embedding_extractor_cache_key(config)
+    with _EMBEDDING_EXTRACTOR_CACHE_LOCK:
+        if _EMBEDDING_EXTRACTOR_CACHE is not None and _EMBEDDING_EXTRACTOR_CACHE[0] == key:
+            return _EMBEDDING_EXTRACTOR_CACHE[1]
+        extractor = _build_embedding_extractor(config)
+        _EMBEDDING_EXTRACTOR_CACHE = (key, extractor)
+        _EMBEDDING_EXTRACTOR_LOAD_COUNT += 1
+        return extractor
+
+
+def embedding_extractor_load_count() -> int:
+    """Return the number of UNI model loads in this process."""
+    with _EMBEDDING_EXTRACTOR_CACHE_LOCK:
+        return _EMBEDDING_EXTRACTOR_LOAD_COUNT
 
 
 def compute_patch_embeddings(

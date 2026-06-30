@@ -663,19 +663,22 @@ def _compute_embeddings_for_candidates(
     slide: object,
     candidates: list[object],
     config: V4EmbeddingAssistedConfig,
+    embedding_extractor: object | None = None,
 ) -> np.ndarray:
-    extractor = build_embedding_extractor(
-        EmbeddingExtractorConfig(
-            embedding_backend=config.embedding_backend,
-            embedding_model_name=config.embedding_model_name,
-            embedding_model_path=config.embedding_model_path,
-            embedding_device=config.embedding_device,
-            embedding_batch_size=config.embedding_batch_size,
-            embedding_num_workers=config.embedding_num_workers,
-            embedding_dim=config.embedding_dim,
-            embedding_distance_metric=config.embedding_distance_metric,
+    extractor = embedding_extractor
+    if extractor is None:
+        extractor = build_embedding_extractor(
+            EmbeddingExtractorConfig(
+                embedding_backend=config.embedding_backend,
+                embedding_model_name=config.embedding_model_name,
+                embedding_model_path=config.embedding_model_path,
+                embedding_device=config.embedding_device,
+                embedding_batch_size=config.embedding_batch_size,
+                embedding_num_workers=config.embedding_num_workers,
+                embedding_dim=config.embedding_dim,
+                embedding_distance_metric=config.embedding_distance_metric,
+            )
         )
-    )
     batches: list[np.ndarray] = []
     for start in range(0, len(candidates), config.embedding_batch_size):
         batch_candidates = candidates[start:start + config.embedding_batch_size]

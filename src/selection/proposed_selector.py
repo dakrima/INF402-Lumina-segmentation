@@ -1,10 +1,4 @@
-"""Medical-image-feature gated embedding-assisted patch selector.
-
-v4_1_medical_embedding_assisted keeps v3_server_quality as the dominant
-technical signal, adds classical medical-image processing proxies, and uses UNI
-only as a morphology embedding reranker inside technically strong candidates.
-It does not run segmentation, diagnose, calculate RCB, or validate clinically.
-"""
+"""Selector propuesto basado en calidad técnica y reranking con embeddings UNI."""
 
 from __future__ import annotations
 
@@ -56,7 +50,6 @@ from src.selection.quality_filters import (
     VISUAL_ENTROPY_METHOD,
 )
 from src.selection.tiatoolbox_baseline import (
-    CLINICAL_WARNING,
     TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
     TIATOOLBOX_CANDIDATE_POOL,
     TIATOOLBOX_EXTRACTION_BACKEND,
@@ -72,35 +65,31 @@ from src.selection.tiatoolbox_baseline import (
     _resolve_output_dir,
     candidate_pool_hash,
 )
-from src.selection.v3_server_quality import (
-    NO_MODEL_SELECTION_NOTE,
-    USEFUL_PATCH_DEFINITION,
+from src.selection.technical_scoring import (
     V3_CRITICAL_NUMERIC_FIELDS,
     V3_FEATURE_DIVERSITY_FIELDS,
     V3_NORMALIZED_FIELDS,
     V3_WEIGHTS,
-    _apply_v3_scores,
-    _candidate_record_from_patch,
-    _format_float,
-    _safe_float,
-    _sanitize_numeric_fields,
-    _score_statistics,
-    _select_candidates_to_score,
-    _selected_mean,
-    _update_candidate_row_from_record,
+    apply_v3_scores as _apply_v3_scores,
+    candidate_record_from_patch as _candidate_record_from_patch,
+    format_float as _format_float,
+    safe_float as _safe_float,
+    sanitize_numeric_fields as _sanitize_numeric_fields,
+    score_statistics as _score_statistics,
+    select_candidates_to_score as _select_candidates_to_score,
+    selected_mean as _selected_mean,
+    update_candidate_row_from_record as _update_candidate_row_from_record,
 )
-from src.selection.v4_embedding_assisted import (
+from src.selection.embedding_reranking import (
     EMBEDDING_CACHE_FILE,
     EMBEDDING_CACHE_METADATA_FILE,
     EMBEDDING_CLUSTER_SUMMARY_FILE,
-    EMBEDDING_SELECTION_NOTE,
     SCORED_CANDIDATES_FILE,
     V4_EMBEDDING_FIELDS,
-    _apply_embedding_metrics,
-    _compute_embeddings_for_candidates,
-    _embedding_cache_paths,
-    _mean_record_value,
-    _write_cluster_summary,
+    apply_embedding_metrics as _apply_embedding_metrics,
+    compute_embeddings_for_candidates as _compute_embeddings_for_candidates,
+    embedding_cache_paths as _embedding_cache_paths,
+    write_cluster_summary as _write_cluster_summary,
 )
 
 
@@ -147,7 +136,7 @@ SCORED_CANDIDATE_FIELDS = list(
 
 @dataclass(frozen=True)
 class V41MedicalEmbeddingAssistedConfig:
-    """Configuration for v4_1_medical_embedding_assisted."""
+    """Configuración completa del selector propuesto."""
 
     wsi_path: Path
     output_dir: Path
@@ -331,15 +320,8 @@ def _method_config(
         "embedding_distance_metric": config.embedding_distance_metric,
         "embedding_cluster_count": config.embedding_cluster_count,
         "medical_image_feature_methods": MEDICAL_IMAGE_FEATURE_METHODS,
-        "useful_patch_definition": USEFUL_PATCH_DEFINITION,
-        "embedding_selection_note": EMBEDDING_SELECTION_NOTE,
-        "medical_selection_note": (
-            "Classical medical-image features are technical proxies for image quality, "
-            "texture, stain dynamics, and pseudo-cellularity. They are not clinical labels."
-        ),
         "no_deep_learning_used_for_selection": False,
         "segmentation_model_used_for_selection": False,
-        "selection_model_note": NO_MODEL_SELECTION_NOTE,
         "extraction_backend": TIATOOLBOX_EXTRACTION_BACKEND,
         "tiatoolbox_version": tiatoolbox_version,
         "tiatoolbox_extractor": TIATOOLBOX_EXTRACTOR_NAME,
@@ -350,7 +332,6 @@ def _method_config(
         "visual_entropy_method": VISUAL_ENTROPY_METHOD,
         "blur_score_method": BLUR_SCORE_METHOD,
         "artifact_penalty_method": ARTIFACT_PENALTY_METHOD,
-        "clinical_warning": CLINICAL_WARNING,
         "created_at": utc_now_iso(),
     }
 
@@ -383,7 +364,6 @@ def _v41_candidate_pool_row(
             "selector": config.selector,
             "selection_method": config.selector,
             "tissue_mask_method": TIATOOLBOX_TISSUE_MASK_METHOD,
-            "clinical_warning": CLINICAL_WARNING,
         }
     )
     return row
@@ -917,7 +897,17 @@ def run_v4_1_medical_embedding_assisted_selection(
     shared_pool: SharedCandidatePool | None = None,
     embedding_extractor: PatchEmbeddingExtractor | None = None,
 ) -> dict[str, Any]:
-    """Run v4_1_medical_embedding_assisted and write selector-compatible outputs."""
+    """
+    ***
+    * config: Parámetros fijos del método propuesto.
+    * shared_pool: Pool común TIAToolbox ya generado para la WSI.
+    * embedding_extractor: Modelo UNI compartido entre casos.
+    ***
+    Calcula características clásicas, embeddings, clustering y reranking espacial y
+    morfológico. Guarda patches, manifiestos, configuración y preview del selector.
+
+    Retorna el resumen completo de la selección.
+    """
     start_time = time.perf_counter()
     root_dir = config.root_dir.resolve()
     wsi_path = config.wsi_path.expanduser().resolve()
@@ -1305,12 +1295,8 @@ def run_v4_1_medical_embedding_assisted_selection(
                 "cluster_balance": config.cluster_balance_weight,
                 "representative_cluster": config.representative_cluster_weight,
             },
-            "useful_patch_definition": USEFUL_PATCH_DEFINITION,
-            "embedding_selection_note": EMBEDDING_SELECTION_NOTE,
             "no_deep_learning_used_for_selection": False,
             "segmentation_model_used_for_selection": False,
-            "selection_model_note": NO_MODEL_SELECTION_NOTE,
-            "clinical_warning": CLINICAL_WARNING,
             "warnings": warnings,
         }
         write_json_manifest(summary, summary_path)

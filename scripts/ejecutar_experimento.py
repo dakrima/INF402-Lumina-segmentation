@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run the nine-WSI INF402 baseline-vs-v4.1 experiment with bounded overlap."""
+"""Ejecuta el experimento final baseline TIAToolbox contra el selector propuesto."""
 
 from __future__ import annotations
 
@@ -40,16 +40,18 @@ from src.selection.tiatoolbox_baseline import (
     run_baseline_selection,
     write_shared_candidate_manifest,
 )
-from src.selection.v4_1_medical_embedding_assisted import (
+from src.selection.proposed_selector import (
     V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
     V41MedicalEmbeddingAssistedConfig,
     run_v4_1_medical_embedding_assisted_selection,
 )
 
 
-DEFAULT_WSI_DIR = Path("/Users/davidkripper/demoCasesMvpFeria/CasosINF402")
-DEFAULT_OUTPUT_DIR = ROOT_DIR / "outputs/patch_selection/inf402_n9"
-DEFAULT_UNI_MODEL = Path("/Users/davidkripper/models/uni/pytorch_model.bin")
+DEFAULT_WSI_DIR = ROOT_DIR / "data/raw/BACH"
+DEFAULT_OUTPUT_DIR = ROOT_DIR / "results/runs/inf402_n9"
+DEFAULT_UNI_MODEL = Path(
+    os.environ.get("UNI_MODEL_PATH", ROOT_DIR / "models/UNI/pytorch_model.bin")
+)
 PILOT_CASE_IDS = ("TCGA-E2-A1L7", "TCGA-C8-A26Y")
 MIB = 1024 * 1024
 
@@ -67,7 +69,7 @@ CORE_METRICS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the bounded-concurrency INF402 patch-selection experiment.",
+        description="Ejecuta el experimento INF402 sobre nueve WSI con concurrencia acotada.",
     )
     parser.add_argument("--wsi-dir", type=Path, default=DEFAULT_WSI_DIR)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -79,9 +81,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def case_id_from_path(path: Path) -> str:
+    """Obtiene el identificador TCGA utilizado en los manifiestos de la corrida original."""
     parts = path.name.split("-")
     if len(parts) < 3:
-        raise ValueError(f"Cannot derive TCGA case id from {path.name}.")
+        raise ValueError(f"No se pudo obtener el identificador TCGA desde {path.name}.")
     return "-".join(parts[:3])
 
 
@@ -96,7 +99,7 @@ def _atomic_json(payload: dict[str, Any], path: Path) -> None:
 
 
 class MemoryMonitor:
-    """Sample process memory and system swap while cases are active."""
+    """Registra memoria del proceso y swap mientras se procesan las WSI."""
 
     def __init__(self, interval_seconds: float = 2.0) -> None:
         self.interval_seconds = interval_seconds
@@ -201,6 +204,7 @@ class MemoryMonitor:
 
 
 def baseline_config(wsi_path: Path, output_dir: Path) -> BaselineSelectionConfig:
+    """Construye la configuración inmutable del baseline usado en el paper."""
     return BaselineSelectionConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
@@ -221,6 +225,7 @@ def v41_config(
     uni_model_path: Path,
     batch_size: int,
 ) -> V41MedicalEmbeddingAssistedConfig:
+    """Construye la configuración exacta del selector propuesto usado en el paper."""
     return V41MedicalEmbeddingAssistedConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
@@ -290,7 +295,7 @@ def run_case(
         "status": "running",
         "embedding_batch_size": batch_size,
     }
-    print(f"[START] {case_id} (UNI batch {batch_size})", flush=True)
+    print(f"[INICIO] {case_id} (lote UNI {batch_size})", flush=True)
     pool = None
     try:
         base_config = baseline_config(wsi_path, baseline_dir)
@@ -520,7 +525,6 @@ def write_aggregate_outputs(
             ],
             "scheduler": scheduler,
             "memory": memory,
-            "clinical_warning": "Technical patch selection only; not diagnosis or clinical validation.",
         },
         summary_path,
     )
@@ -530,8 +534,6 @@ def write_aggregate_outputs(
         "# Resultados técnicos de selección de patches",
         "",
         f"Se completaron {len(successful)} de {len(case_statuses)} WSI.",
-        "La comparación es técnica y no constituye validación clínica.",
-        "",
         "| Métrica | Baseline (media ± DE) | v4.1 (media ± DE) | Diferencia pareada media |",
         "|---|---:|---:|---:|",
     ]
@@ -566,7 +568,7 @@ def self_check() -> None:
     changed = TiatoolboxCandidate("b", 1, 31, 40, 1024, 1)
     assert expected != candidate_pool_hash("TCGA-X-Y", [first, changed])
     assert expected != candidate_pool_hash("TCGA-X-Z", [first, second])
-    print("[OK] Candidate pool hash self-check passed.")
+    print("[OK] Autocomprobación del hash del pool superada.")
 
 
 def main() -> int:
@@ -582,10 +584,10 @@ def main() -> int:
     uni_model_path = args.uni_model_path.expanduser().resolve()
     paths = sorted(wsi_dir.glob("*.svs"))
     if len(paths) != args.expected_count:
-        print(f"[FAIL] Expected {args.expected_count} WSI files, found {len(paths)} in {wsi_dir}.")
+        print(f"[ERROR] Se esperaban {args.expected_count} WSI y se encontraron {len(paths)} en {wsi_dir}.")
         return 1
     if not uni_model_path.exists():
-        print(f"[FAIL] UNI model does not exist: {uni_model_path}")
+        print(f"[ERROR] No existe el modelo UNI: {uni_model_path}")
         return 1
     output_root.mkdir(parents=True, exist_ok=True)
     experiment_started = time.perf_counter()
@@ -593,7 +595,7 @@ def main() -> int:
     by_case = {case_id_from_path(path): path for path in paths}
     missing_pilot = [case_id for case_id in PILOT_CASE_IDS if case_id not in by_case]
     if missing_pilot:
-        print(f"[FAIL] Missing pilot cases: {', '.join(missing_pilot)}")
+        print(f"[ERROR] Faltan los casos piloto: {', '.join(missing_pilot)}")
         return 1
     pilot_paths = [by_case[case_id] for case_id in PILOT_CASE_IDS]
     remaining_paths = [path for path in paths if path not in pilot_paths]
@@ -767,8 +769,8 @@ def main() -> int:
     }
     _atomic_json(run_status, output_root / "run_status.json")
     completed = sum(item.get("status") == "completed" for item in case_statuses)
-    print(f"[OK] Completed {completed}/{len(case_statuses)} WSI comparisons.")
-    print(f"[OK] Aggregate summary: {outputs['aggregate_summary_json']}")
+    print(f"[OK] Se completaron {completed}/{len(case_statuses)} comparaciones WSI.")
+    print(f"[OK] Resumen agregado: {outputs['aggregate_summary_json']}")
     return 0 if completed == len(case_statuses) else 1
 
 

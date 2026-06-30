@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Measure UNI-space diversity of the existing INF402 patch selections."""
+"""Genera las métricas morfológicas finales desde los embeddings UNI persistidos."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from src.selection.embedding_scoring import load_embedding_cache, normalize_embe
 from src.selection.manifests import write_csv_manifest, write_json_manifest
 
 
-DEFAULT_EXPERIMENT_DIR = ROOT_DIR / "outputs/patch_selection/inf402_n9"
+DEFAULT_EXPERIMENT_DIR = ROOT_DIR / "results/runs/inf402_n9"
 METHODS = {
     "baseline": "baseline_tiatoolbox",
     "v4_1": "v4_1_medical_embedding_assisted",
@@ -83,7 +83,7 @@ TOLERANCE = 2e-6
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Analyze morphology diversity using persisted UNI embeddings.",
+        description="Calcula diversidad morfológica con los embeddings UNI persistidos.",
     )
     parser.add_argument("--experiment-dir", type=Path, default=DEFAULT_EXPERIMENT_DIR)
     parser.add_argument("--expected-cases", type=int, default=9)
@@ -116,6 +116,13 @@ def descriptive(values: list[float]) -> dict[str, float | int]:
 
 
 def distance_metrics(embeddings: np.ndarray) -> tuple[dict[str, float], dict[str, bool]]:
+    """
+    ***
+    * embeddings: Matriz con un embedding por patch seleccionado.
+    ***
+    Normaliza por L2 y calcula distancias coseno entre pares y al vecino más cercano.
+    Retorna las métricas y las comprobaciones de validez de la matriz.
+    """
     if embeddings.ndim != 2 or embeddings.shape[0] < 2:
         raise ValueError("At least two two-dimensional embeddings are required.")
     if not np.isfinite(embeddings).all():
@@ -402,8 +409,6 @@ def render_markdown(summary: dict[str, Any], case_differences: dict[str, dict[st
         f"{nearest['comparison_counts']['baseline_greater']} y se observaron {nearest['comparison_counts']['ties']} empates. "
         f"La diferencia pareada media fue {nearest['paired_difference_v4_1_minus_baseline']['mean']:+.6f}.",
         "",
-        "Estas métricas describen diversidad morfológica aproximada en el espacio de representaciones de UNI; no demuestran diversidad histológica real ni utilidad clínica.",
-        "",
         "## Propuesta breve para la sección III",
         "",
         f"La diversidad morfológica aproximada se evaluó mediante la distancia coseno entre embeddings UNI de los patches seleccionados. "
@@ -425,7 +430,7 @@ def self_check() -> None:
     assert math.isclose(metrics["mean_pairwise_cosine_distance"], 4.0 / 3.0, abs_tol=1e-7)
     assert math.isclose(metrics["mean_nearest_neighbor_cosine_distance"], 1.0, abs_tol=1e-7)
     assert all(validation.values())
-    print("Morphological diversity self-check passed.")
+    print("Autocomprobación de diversidad morfológica superada.")
 
 
 def main() -> int:
@@ -481,10 +486,6 @@ def main() -> int:
     )
     summary = {
         "status": "completed",
-        "clinical_warning": (
-            "Approximate morphology diversity in UNI representation space only; "
-            "not real histological diversity or clinical utility."
-        ),
         "metric": {
             "distance": "cosine_distance_on_l2_normalized_embeddings",
             "pairwise": "upper_triangle_without_diagonal_each_pair_once",
@@ -522,10 +523,10 @@ def main() -> int:
         render_markdown(aggregate_summary, case_differences),
         encoding="utf-8",
     )
-    print(f"Processed cases: {len(case_dirs)}")
-    print(f"Embedding references reused: {summary['validation']['selected_embedding_references_reused']}")
-    print("Embeddings recomputed: 0")
-    print(f"Outputs: {output_dir}")
+    print(f"Casos procesados: {len(case_dirs)}")
+    print(f"Referencias de embeddings reutilizadas: {summary['validation']['selected_embedding_references_reused']}")
+    print("Embeddings recalculados: 0")
+    print(f"Resultados: {output_dir}")
     return 0
 
 

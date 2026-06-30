@@ -1,4 +1,4 @@
-"""Patch selection architecture for INF402 Lumina/Histora."""
+"""Selectores que participan en el experimento final de INF402."""
 
 # Primary paper selectors.
 from src.selection.tiatoolbox_baseline import (
@@ -6,47 +6,17 @@ from src.selection.tiatoolbox_baseline import (
     BaselineSelectionConfig,
     run_baseline_selection,
 )
-from src.selection.v4_1_medical_embedding_assisted import (
+from src.selection.proposed_selector import (
     V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME,
     V41MedicalEmbeddingAssistedConfig,
     run_v4_1_medical_embedding_assisted_selection,
 )
 
-# Legacy / experimental selectors kept for traceability and reproducibility.
-from src.selection.smart_tissue_nuclei import (
-    SMART_SELECTOR_NAME,
-    SMART_V2_LIGHT_SELECTOR_NAME,
-    SmartTissueNucleiConfig,
-    run_smart_tissue_nuclei_selection,
-)
-from src.selection.v3_server_quality import (
-    V3_SERVER_QUALITY_SELECTOR_NAME,
-    V3ServerQualityConfig,
-    run_v3_server_quality_selection,
-)
-from src.selection.v4_embedding_assisted import (
-    V4_EMBEDDING_ASSISTED_SELECTOR_NAME,
-    V4EmbeddingAssistedConfig,
-    run_v4_embedding_assisted_selection,
-)
-
 __all__ = [
-    # Primary paper selectors.
     "BASELINE_SELECTOR_NAME",
     "BaselineSelectionConfig",
     "V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME",
     "V41MedicalEmbeddingAssistedConfig",
     "run_baseline_selection",
     "run_v4_1_medical_embedding_assisted_selection",
-    # Legacy / experimental selectors.
-    "SMART_SELECTOR_NAME",
-    "SMART_V2_LIGHT_SELECTOR_NAME",
-    "SmartTissueNucleiConfig",
-    "V3_SERVER_QUALITY_SELECTOR_NAME",
-    "V3ServerQualityConfig",
-    "V4_EMBEDDING_ASSISTED_SELECTOR_NAME",
-    "V4EmbeddingAssistedConfig",
-    "run_smart_tissue_nuclei_selection",
-    "run_v3_server_quality_selection",
-    "run_v4_embedding_assisted_selection",
 ]

@@ -69,7 +69,6 @@
       }
     }
   },
-  "clinical_warning": "Approximate morphology diversity in UNI representation space only; not real histological diversity or clinical utility.",
   "cohort": {
     "case_ids": [
       "TCGA-A2-A04T",

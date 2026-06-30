@@ -17,8 +17,8 @@ from src.selection.manifests import utc_now_iso
 
 
 UNI_BACKEND_MISSING_MESSAGE = (
-    "UNI embedding backend requested but model weights/path are not available. "
-    "Provide --embedding-model-path or configure access to the UNI model."
+    "Se solicitó UNI, pero los pesos o su ruta no están disponibles. "
+    "Proporcione --embedding-model-path o configure el acceso al modelo UNI."
 )
 
 
@@ -103,7 +103,7 @@ class PatchEmbeddingExtractor:
             embeddings = embeddings.reshape(embeddings.shape[0], -1)
         if embeddings.ndim != 2:
             raise RuntimeError(
-                f"Embedding model returned shape {embeddings.shape}; expected 2D array."
+                f"El modelo de embeddings retornó dimensiones {embeddings.shape}; se esperaba una matriz 2D."
             )
         if self.distance_metric == "cosine":
             embeddings = normalize_embeddings(embeddings)
@@ -119,10 +119,10 @@ def _import_torch() -> object:
     """Importa PyTorch de forma diferida y entrega un error técnico contextualizado."""
     try:
         import torch  # type: ignore
-    except Exception as exc:  # noqa: BLE001 - dependency diagnostic
+    except Exception as exc:  # noqa: BLE001 - diagnóstico de dependencia
         raise RuntimeError(
-            "UNI embedding backend requires PyTorch. Activate the project environment "
-            "and provide --embedding-model-path."
+            "El backend UNI requiere PyTorch. Active el entorno del proyecto y "
+            "proporcione --embedding-model-path."
         ) from exc
     return torch
 
@@ -137,11 +137,11 @@ def _resolve_device(torch_module: object, requested_device: str) -> object:
         else:
             requested_device = "cpu"
     if requested_device == "cuda" and not torch_module.cuda.is_available():
-        raise RuntimeError("Embedding device cuda was requested but CUDA is not available.")
+        raise RuntimeError("Se solicitó el dispositivo cuda, pero CUDA no está disponible.")
     if requested_device == "mps" and not (
         hasattr(torch_module.backends, "mps") and torch_module.backends.mps.is_available()
     ):
-        raise RuntimeError("Embedding device mps was requested but MPS is not available.")
+        raise RuntimeError("Se solicitó el dispositivo mps, pero MPS no está disponible.")
     return torch_module.device(requested_device)
 
 
@@ -166,7 +166,7 @@ def _checkpoint_state_dict(checkpoint: object) -> dict[str, object]:
                 checkpoint = value
                 break
     if not isinstance(checkpoint, dict):
-        raise RuntimeError("UNI checkpoint did not contain a loadable state_dict.")
+        raise RuntimeError("El checkpoint UNI no contiene un `state_dict` cargable.")
     cleaned: dict[str, object] = {}
     for key, value in checkpoint.items():
         if not isinstance(key, str):
@@ -191,7 +191,7 @@ def _load_uni_model_from_path(
     Retorna el modelo en modo evaluación y ubicado en el dispositivo indicado.
     """
     if not model_path.exists():
-        raise RuntimeError(f"{UNI_BACKEND_MISSING_MESSAGE} Path does not exist: {model_path}")
+        raise RuntimeError(f"{UNI_BACKEND_MISSING_MESSAGE} La ruta no existe: {model_path}")
 
     if model_path.is_dir():
         preferred_names = [
@@ -208,9 +208,8 @@ def _load_uni_model_from_path(
                 break
         else:
             raise RuntimeError(
-                "UNI model path is a directory, but no supported checkpoint file was found. "
-                "Provide --embedding-model-path pointing to a local .pt/.pth/.bin checkpoint "
-                "or TorchScript file."
+                "La ruta UNI es una carpeta, pero no contiene un checkpoint soportado. "
+                "Use --embedding-model-path con un checkpoint local .pt/.pth/.bin o TorchScript."
             )
 
     suffix = model_path.suffix.lower()
@@ -222,10 +221,10 @@ def _load_uni_model_from_path(
 
     try:
         import timm  # type: ignore
-    except Exception as exc:  # noqa: BLE001 - dependency diagnostic
+    except Exception as exc:  # noqa: BLE001 - diagnóstico de dependencia
         raise RuntimeError(
-            "Loading a UNI checkpoint requires timm unless the file is TorchScript. "
-            "Install/activate timm in the project environment or provide a TorchScript model."
+            "Cargar un checkpoint UNI requiere timm, salvo que sea TorchScript. "
+            "Active timm en el entorno o proporcione un modelo TorchScript."
         ) from exc
 
     model = timm.create_model(
@@ -241,12 +240,12 @@ def _load_uni_model_from_path(
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
     if len(missing) > 80:
         raise RuntimeError(
-            "UNI checkpoint could not be loaded into the expected ViT-L/16 backbone. "
-            "Check --embedding-model-path and model format."
+            "El checkpoint UNI no se pudo cargar en el backbone ViT-L/16 esperado. "
+            "Revise --embedding-model-path y el formato del modelo."
         )
     if unexpected and len(unexpected) > 80:
         raise RuntimeError(
-            "UNI checkpoint has too many unexpected keys for the expected ViT-L/16 backbone."
+            "El checkpoint UNI contiene demasiadas claves inesperadas para el backbone ViT-L/16."
         )
     model.to(device)
     model.eval()
@@ -257,12 +256,12 @@ def _build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddi
     """Valida la configuración, carga UNI y construye su wrapper de inferencia."""
     if config.embedding_backend != "uni":
         raise RuntimeError(
-            f"Unsupported embedding backend '{config.embedding_backend}'. Only 'uni' is implemented."
+            f"Backend de embeddings no soportado '{config.embedding_backend}'. Solo se implementa 'uni'."
         )
     if config.embedding_model_path is None:
         raise RuntimeError(UNI_BACKEND_MISSING_MESSAGE)
     if config.embedding_distance_metric != "cosine":
-        raise RuntimeError("Only cosine embedding distance is currently implemented.")
+        raise RuntimeError("Solo está implementada la distancia cosine entre embeddings.")
 
     torch_module = _import_torch()
     device = _resolve_device(torch_module, config.embedding_device)
@@ -394,7 +393,7 @@ def load_embedding_cache(
     """Carga un cache y retorna embeddings, IDs de candidatos y metadata."""
     if not cache_path.exists() or not metadata_path.exists():
         raise FileNotFoundError(
-            f"Embedding cache not found: {cache_path} / {metadata_path}"
+            f"No se encontró el cache de embeddings: {cache_path} / {metadata_path}"
         )
     with np.load(cache_path, allow_pickle=True) as data:
         embeddings = np.asarray(data["embeddings"], dtype=np.float32)
@@ -416,17 +415,17 @@ def validate_embedding_cache(
 ) -> str | None:
     """Valida IDs, modelo, métrica y dimensiones; retorna el motivo de incompatibilidad."""
     if candidate_ids != cached_candidate_ids:
-        return "Embedding cache candidate_ids do not match the current candidate subset."
+        return "Los candidate_ids del cache no coinciden con el subconjunto actual."
     if metadata.get("embedding_backend") != embedding_backend:
-        return "Embedding cache was created with a different embedding_backend."
+        return "El cache fue creado con un embedding_backend diferente."
     if metadata.get("embedding_model_name") != embedding_model_name:
-        return "Embedding cache was created with a different embedding_model_name."
+        return "El cache fue creado con un embedding_model_name diferente."
     if metadata.get("embedding_distance_metric") != embedding_distance_metric:
-        return "Embedding cache was created with a different distance metric."
+        return "El cache fue creado con una métrica de distancia diferente."
     if embeddings.ndim != 2 or embeddings.shape[0] != len(candidate_ids):
-        return "Embedding cache has invalid shape."
+        return "El cache de embeddings tiene dimensiones inválidas."
     if expected_dim is not None and int(embeddings.shape[1]) != expected_dim:
-        return "Embedding cache dimension does not match --embedding-dim."
+        return "La dimensión del cache no coincide con --embedding-dim."
     return None
 
 
@@ -437,7 +436,7 @@ def _embedding_distance(a: np.ndarray, b: np.ndarray, metric: str) -> np.ndarray
     if metric == "euclidean":
         squared = np.sum((a[:, None, :] - b[None, :, :]) ** 2, axis=2)
         return np.sqrt(np.maximum(squared, 0.0))
-    raise ValueError(f"Unsupported embedding distance metric: {metric}")
+    raise ValueError(f"Métrica de distancia de embeddings no soportada: {metric}")
 
 
 def cluster_embeddings(
@@ -455,19 +454,19 @@ def cluster_embeddings(
     """
     warnings: list[str] = []
     if embeddings.ndim != 2:
-        raise ValueError("embeddings must be a 2D array.")
+        raise ValueError("embeddings debe ser una matriz 2D.")
     n_rows = embeddings.shape[0]
     if n_rows == 0:
         return np.zeros((0,), dtype=np.int64), np.zeros((0, 0), dtype=np.float32), "none", warnings
     k = max(1, min(int(cluster_count), n_rows))
     if k < cluster_count:
         warnings.append(
-            f"embedding_cluster_count reduced from {cluster_count} to {k} because fewer embeddings are available."
+            f"embedding_cluster_count se redujo de {cluster_count} a {k} porque hay menos embeddings disponibles."
         )
 
     try:
         from sklearn.cluster import KMeans  # type: ignore
-    except Exception:  # noqa: BLE001 - optional dependency fallback
+    except Exception:  # noqa: BLE001 - fallback de dependencia opcional
         labels, centroids = _fallback_kmeans(
             embeddings,
             cluster_count=k,

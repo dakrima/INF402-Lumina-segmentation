@@ -93,7 +93,7 @@ def _clip01(value: float) -> float:
 
 def _resize_for_features(rgb_image: Image.Image, feature_size: int) -> Image.Image:
     if feature_size <= 0:
-        raise ValueError("feature_size must be positive.")
+        raise ValueError("feature_size debe ser mayor que cero.")
     resampling = getattr(Image, "Resampling", Image).BILINEAR
     return rgb_image.convert("RGB").resize((feature_size, feature_size), resampling)
 

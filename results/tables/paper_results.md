@@ -1,8 +1,6 @@
 # Resultados técnicos de selección de patches
 
 Se completaron 9 de 9 WSI.
-La comparación es técnica y no constituye validación clínica.
-
 | Métrica | Baseline (media ± DE) | v4.1 (media ± DE) | Diferencia pareada media |
 |---|---:|---:|---:|
 | Proporción media de tejido | 0.8035 ± 0.1179 | 0.9446 ± 0.0276 | 0.1411 |

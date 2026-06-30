@@ -190,46 +190,46 @@ def _validate_config(config: V41MedicalEmbeddingAssistedConfig, wsi_path: Path) 
     """Valida rutas, rangos y opciones permitidas antes de ejecutar el selector."""
     if config.selector != V41_MEDICAL_EMBEDDING_ASSISTED_SELECTOR_NAME:
         raise NotImplementedError(
-            f"Selector '{config.selector}' is not handled by v4_1_medical_embedding_assisted."
+            f"El selector '{config.selector}' no está soportado por v4_1_medical_embedding_assisted."
         )
     if config.patch_size <= 0:
-        raise ValueError("--patch-size must be positive.")
+        raise ValueError("--patch-size debe ser mayor que cero.")
     if config.stride <= 0:
-        raise ValueError("--stride must be positive.")
+        raise ValueError("--stride debe ser mayor que cero.")
     if config.max_patches <= 0:
-        raise ValueError("--max-patches must be positive.")
+        raise ValueError("--max-patches debe ser mayor que cero.")
     if not 0 <= config.min_tissue_ratio <= 1:
-        raise ValueError("--min-tissue-ratio must be between 0 and 1.")
+        raise ValueError("--min-tissue-ratio debe estar entre 0 y 1.")
     if config.thumbnail_max_size <= 0:
-        raise ValueError("--thumbnail-max-size must be positive.")
+        raise ValueError("--thumbnail-max-size debe ser mayor que cero.")
     if config.max_candidates_to_score < 0:
-        raise ValueError("--max-candidates-to-score must be >= 0.")
+        raise ValueError("--max-candidates-to-score debe ser mayor o igual que cero.")
     if config.feature_size <= 0:
-        raise ValueError("--feature-size must be positive.")
+        raise ValueError("--feature-size debe ser mayor que cero.")
     if config.lambda_spatial < 0:
-        raise ValueError("--lambda-spatial must be >= 0.")
+        raise ValueError("--lambda-spatial debe ser mayor o igual que cero.")
     if config.min_distance_level0 is not None and config.min_distance_level0 <= 0:
-        raise ValueError("--min-distance-level0 must be positive when provided.")
+        raise ValueError("--min-distance-level0 debe ser mayor que cero cuando se especifica.")
     if not 0 <= config.quota_min_score_quantile <= 1:
-        raise ValueError("--quota-min-score-quantile must be between 0 and 1.")
+        raise ValueError("--quota-min-score-quantile debe estar entre 0 y 1.")
     if config.feature_diversity_weight < 0:
-        raise ValueError("--feature-diversity-weight must be >= 0.")
+        raise ValueError("--feature-diversity-weight debe ser mayor o igual que cero.")
     if config.redundancy_penalty_weight < 0:
-        raise ValueError("--redundancy-penalty-weight must be >= 0.")
+        raise ValueError("--redundancy-penalty-weight debe ser mayor o igual que cero.")
     if config.embedding_backend != "uni":
-        raise ValueError("--embedding-backend currently supports only uni.")
+        raise ValueError("--embedding-backend solo admite uni.")
     if config.embedding_device not in {"auto", "cpu", "cuda", "mps"}:
-        raise ValueError("--embedding-device must be auto, cpu, cuda, or mps.")
+        raise ValueError("--embedding-device debe ser auto, cpu, cuda o mps.")
     if config.embedding_batch_size <= 0:
-        raise ValueError("--embedding-batch-size must be positive.")
+        raise ValueError("--embedding-batch-size debe ser mayor que cero.")
     if config.embedding_num_workers < 0:
-        raise ValueError("--embedding-num-workers must be >= 0.")
+        raise ValueError("--embedding-num-workers debe ser mayor o igual que cero.")
     if config.embedding_dim is not None and config.embedding_dim <= 0:
-        raise ValueError("--embedding-dim must be positive when provided.")
+        raise ValueError("--embedding-dim debe ser mayor que cero cuando se especifica.")
     if config.embedding_distance_metric != "cosine":
-        raise ValueError("--embedding-distance-metric currently supports only cosine.")
+        raise ValueError("--embedding-distance-metric solo admite cosine.")
     if config.embedding_cluster_count <= 0:
-        raise ValueError("--embedding-cluster-count must be positive.")
+        raise ValueError("--embedding-cluster-count debe ser mayor que cero.")
     for field_name, value in {
         "embedding_diversity_weight": config.embedding_diversity_weight,
         "embedding_redundancy_weight": config.embedding_redundancy_weight,
@@ -240,21 +240,21 @@ def _validate_config(config: V41MedicalEmbeddingAssistedConfig, wsi_path: Path) 
         "medical_artifact_max": config.medical_artifact_max,
     }.items():
         if value < 0:
-            raise ValueError(f"--{field_name.replace('_', '-')} must be >= 0.")
+            raise ValueError(f"--{field_name.replace('_', '-')} debe ser mayor o igual que cero.")
     if not 0 <= config.min_score_v3_base_quantile <= 1:
-        raise ValueError("--min-score-v3-base-quantile must be between 0 and 1.")
+        raise ValueError("--min-score-v3-base-quantile debe estar entre 0 y 1.")
     if not 0 < config.medical_top_quantile <= 1:
-        raise ValueError("--medical-top-quantile must be in (0, 1].")
+        raise ValueError("--medical-top-quantile debe estar en el intervalo (0, 1].")
     if config.medical_top_k_candidates is not None and config.medical_top_k_candidates <= 0:
-        raise ValueError("--medical-top-k-candidates must be positive when provided.")
+        raise ValueError("--medical-top-k-candidates debe ser mayor que cero cuando se especifica.")
     if config.medical_rerank_mode not in V41_MEDICAL_RERANK_MODES:
         allowed = ", ".join(sorted(V41_MEDICAL_RERANK_MODES))
-        raise ValueError(f"--medical-rerank-mode must be one of: {allowed}.")
+        raise ValueError(f"--medical-rerank-mode debe ser uno de: {allowed}.")
     if wsi_path.suffix.lower() not in SUPPORTED_WSI_EXTENSIONS:
         allowed = ", ".join(sorted(SUPPORTED_WSI_EXTENSIONS))
-        raise ValueError(f"Unsupported WSI extension '{wsi_path.suffix}'. Use one of: {allowed}.")
+        raise ValueError(f"Extensión WSI no soportada '{wsi_path.suffix}'. Use una de: {allowed}.")
     if not wsi_path.exists():
-        raise FileNotFoundError(f"WSI path does not exist: {wsi_path}")
+        raise FileNotFoundError(f"La ruta de la WSI no existe: {wsi_path}")
 
 
 def _method_config(
@@ -272,7 +272,7 @@ def _method_config(
         "candidate_pool": TIATOOLBOX_CANDIDATE_POOL,
         "candidate_metadata_semantics": TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
         "candidate_pool_definition": (
-            "TIAToolbox sliding-window candidates passing Otsu input mask and min_mask_ratio."
+            "Candidatos de ventana deslizante TIAToolbox que cumplen la máscara Otsu y min_mask_ratio."
         ),
         "candidate_pool_shared_with_baseline": True,
         "shared_candidate_pool_selector": "baseline_tiatoolbox",
@@ -484,7 +484,7 @@ def _load_or_compute_embeddings_v41(
         )
         if cache_error is None:
             return embeddings, True, cache_path, metadata_path
-        warnings.append(f"Embedding cache was not reused: {cache_error}")
+        warnings.append(f"No se reutilizó el cache de embeddings: {cache_error}")
 
     if config.embedding_model_path is None:
         raise RuntimeError(UNI_BACKEND_MISSING_MESSAGE)
@@ -500,8 +500,8 @@ def _load_or_compute_embeddings_v41(
     if config.embedding_cache_path is not None and not _is_relative_to(cache_path, output_dir):
         write_cache_path, write_metadata_path = _output_local_embedding_cache_paths(output_dir)
         warnings.append(
-            "External embedding cache path was not overwritten after cache mismatch; "
-            "new embeddings were written to the v4.1 output directory."
+            "El cache externo incompatible no fue sobrescrito; los nuevos embeddings "
+            "se guardaron en la carpeta de salida v4.1."
         )
     if config.cache_embeddings:
         write_embedding_cache(
@@ -761,22 +761,22 @@ def _eligible_records(
     ]
     if len(eligible) < config.max_patches and len(relaxed) > len(eligible):
         warnings.append(
-            "Strict v4.1 medical eligibility had fewer candidates than max_patches; "
-            "relaxed quality/utility/artifact thresholds were used."
+            "El filtro médico estricto v4.1 entregó menos candidatos que max_patches; "
+            "se usaron los umbrales relajados de calidad, utilidad y artefactos."
         )
         chosen_stage = "relaxed_thresholds"
         eligible = relaxed
     if len(eligible) < config.max_patches and len(medical_top) > len(eligible):
         warnings.append(
-            "Relaxed v4.1 eligibility still had fewer candidates than max_patches; "
-            "top medical-utility candidates from the v3 pool were used."
+            "El filtro relajado v4.1 aún entregó menos candidatos que max_patches; "
+            "se usaron los candidatos de mayor utilidad médica del pool v3."
         )
         chosen_stage = "top_v3_medical_pool"
         eligible = medical_top
     if len(eligible) < config.max_patches:
         warnings.append(
-            "Top v3/medical pool still had fewer candidates than max_patches; "
-            "selection can fill from all scored candidates."
+            "El pool superior v3/médico aún entregó menos candidatos que max_patches; "
+            "la selección puede completar desde todos los candidatos evaluados."
         )
         chosen_stage = "all_scored_fallback"
         eligible = list(records)
@@ -1001,7 +1001,7 @@ def run_v4_1_medical_embedding_assisted_selection(
         )
     else:
         if shared_pool.wsi_path != wsi_path:
-            raise ValueError("Shared candidate pool belongs to a different WSI.")
+            raise ValueError("El pool común de candidatos pertenece a otra WSI.")
         extractor = None
         tiatoolbox_version = shared_pool.tiatoolbox_version
         candidates = list(shared_pool.candidates)
@@ -1323,7 +1323,7 @@ def run_v4_1_medical_embedding_assisted_selection(
             "candidate_pool": TIATOOLBOX_CANDIDATE_POOL,
             "candidate_metadata_semantics": TIATOOLBOX_CANDIDATE_METADATA_SEMANTICS,
             "candidate_pool_definition": (
-                "TIAToolbox sliding-window candidates passing Otsu input mask and min_mask_ratio."
+                "Candidatos de ventana deslizante TIAToolbox que cumplen la máscara Otsu y min_mask_ratio."
             ),
             "candidate_pool_shared_with_baseline": True,
             "shared_candidate_pool_selector": "baseline_tiatoolbox",

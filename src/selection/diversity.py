@@ -43,12 +43,12 @@ def parse_quota_grid(quota_grid: str) -> tuple[int, int]:
     """Interpreta una cuadrícula de cuotas como `4x4`."""
     normalized = quota_grid.lower().strip()
     if "x" not in normalized:
-        raise ValueError("--quota-grid must use format ROWSxCOLS, for example 4x4.")
+        raise ValueError("--quota-grid debe usar el formato FILASxCOLUMNAS, por ejemplo 4x4.")
     rows_text, cols_text = normalized.split("x", 1)
     rows = int(rows_text)
     cols = int(cols_text)
     if rows <= 0 or cols <= 0:
-        raise ValueError("--quota-grid rows and columns must be positive.")
+        raise ValueError("Las filas y columnas de --quota-grid deben ser mayores que cero.")
     return rows, cols
 
 

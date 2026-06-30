@@ -114,7 +114,6 @@ CANDIDATE_METADATA_FIELDS = [
     "mpp_y",
     "level_count",
     "tissue_mask_method",
-    "clinical_warning",
 ]
 
 SELECTED_METADATA_FIELDS = [
@@ -218,7 +217,6 @@ SELECTED_METADATA_FIELDS = [
     "selection_method",
     "seed",
     "tissue_mask_method",
-    "clinical_warning",
 ]
 
 

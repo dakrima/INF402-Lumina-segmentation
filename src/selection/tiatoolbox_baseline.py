@@ -113,8 +113,8 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
     """Valida, limpia cuando corresponde y crea la carpeta de salida del método."""
     if _has_user_outputs(output_dir) and not overwrite:
         raise FileExistsError(
-            f"Output directory already exists and is not empty: {output_dir}. "
-            "Use --overwrite to regenerate this run."
+            f"La carpeta de salida ya existe y no está vacía: {output_dir}. "
+            "Use --overwrite para regenerar la corrida."
         )
     if overwrite and output_dir.exists():
         clear_output_dir_safely(output_dir=output_dir, root_dir=root_dir)
@@ -126,24 +126,24 @@ def _validate_config(config: BaselineSelectionConfig, wsi_path: Path) -> None:
     """Valida selector, rangos numéricos, extensión y existencia de la WSI."""
     if config.selector != BASELINE_SELECTOR_NAME:
         raise NotImplementedError(
-            f"Selector '{config.selector}' todavía no está implementado. "
-            f"Esta etapa solo soporta {BASELINE_SELECTOR_NAME}."
+            f"El selector '{config.selector}' no está soportado. "
+            f"Esta etapa solo admite {BASELINE_SELECTOR_NAME}."
         )
     if config.patch_size <= 0:
-        raise ValueError("--patch-size must be positive.")
+        raise ValueError("--patch-size debe ser mayor que cero.")
     if config.stride <= 0:
-        raise ValueError("--stride must be positive.")
+        raise ValueError("--stride debe ser mayor que cero.")
     if config.max_patches <= 0:
-        raise ValueError("--max-patches must be positive.")
+        raise ValueError("--max-patches debe ser mayor que cero.")
     if not 0 <= config.min_tissue_ratio <= 1:
-        raise ValueError("--min-tissue-ratio must be between 0 and 1.")
+        raise ValueError("--min-tissue-ratio debe estar entre 0 y 1.")
     if config.thumbnail_max_size <= 0:
-        raise ValueError("--thumbnail-max-size must be positive.")
+        raise ValueError("--thumbnail-max-size debe ser mayor que cero.")
     if wsi_path.suffix.lower() not in SUPPORTED_WSI_EXTENSIONS:
         allowed = ", ".join(sorted(SUPPORTED_WSI_EXTENSIONS))
-        raise ValueError(f"Unsupported WSI extension '{wsi_path.suffix}'. Use one of: {allowed}.")
+        raise ValueError(f"Extensión WSI no soportada '{wsi_path.suffix}'. Use una de: {allowed}.")
     if not wsi_path.exists():
-        raise FileNotFoundError(f"WSI path does not exist: {wsi_path}")
+        raise FileNotFoundError(f"La ruta de la WSI no existe: {wsi_path}")
 
 
 def _base_slide_metadata(slide: object) -> dict[str, Any]:
@@ -171,10 +171,10 @@ def _import_tiatoolbox_extractor() -> tuple[type[Any], str]:
     try:
         import tiatoolbox
         from tiatoolbox.tools.patchextraction import SlidingWindowPatchExtractor
-    except Exception as exc:  # noqa: BLE001 - dependency diagnostic
+    except Exception as exc:  # noqa: BLE001 - diagnóstico de dependencia
         raise RuntimeError(
-            "Missing or unusable dependency: TIAToolbox. Activate the "
-            "inf402-lumina-seg environment before running baseline_tiatoolbox."
+            "Falta TIAToolbox o no se puede importar. Active el entorno "
+            "inf402-lumina-seg antes de ejecutar baseline_tiatoolbox."
         ) from exc
     return SlidingWindowPatchExtractor, str(getattr(tiatoolbox, "__version__", "unknown"))
 
@@ -250,11 +250,11 @@ def _candidates_from_extractor(extractor: object, patch_size: int) -> list[Tiato
     """
     locations_df = getattr(extractor, "locations_df", None)
     if locations_df is None:
-        raise RuntimeError("TIAToolbox extractor did not expose locations_df.")
+        raise RuntimeError("El extractor TIAToolbox no expuso `locations_df`.")
     missing_columns = {"x", "y"} - set(locations_df.columns)
     if missing_columns:
         raise RuntimeError(
-            "TIAToolbox locations_df is missing required columns: "
+            "`locations_df` de TIAToolbox no contiene las columnas requeridas: "
             f"{', '.join(sorted(missing_columns))}."
         )
 
@@ -407,7 +407,7 @@ def _patch_image_from_extractor(extractor: object, tiatoolbox_index: int) -> Ima
     patch_array = np.asarray(patch)
     if patch_array.ndim != 3 or patch_array.shape[2] < 3:
         raise RuntimeError(
-            f"Unexpected TIAToolbox patch shape at index {tiatoolbox_index}: "
+            f"Dimensiones inesperadas del patch TIAToolbox en el índice {tiatoolbox_index}: "
             f"{patch_array.shape}."
         )
     return Image.fromarray(patch_array[..., :3].astype(np.uint8), mode="RGB")
@@ -576,10 +576,10 @@ def run_baseline_selection(
         candidate_generation_seconds = generated_pool.candidate_generation_seconds
     else:
         if shared_pool.wsi_path != wsi_path:
-            raise ValueError("Shared candidate pool belongs to a different WSI.")
+            raise ValueError("El pool común de candidatos pertenece a otra WSI.")
         extractor = shared_pool.extractor
         if extractor is None:
-            raise RuntimeError("Shared TIAToolbox extractor was released before baseline export.")
+            raise RuntimeError("El extractor TIAToolbox compartido se liberó antes de exportar el baseline.")
         tiatoolbox_version = shared_pool.tiatoolbox_version
         slide_metadata = shared_pool.slide_metadata
         candidates = list(shared_pool.candidates)
@@ -684,7 +684,7 @@ def run_baseline_selection(
             output_path=preview_path,
         )
     else:
-        preview_warning = "Preview not generated because TIAToolbox thumbnail was unavailable."
+        preview_warning = "No se generó la preview porque TIAToolbox no entregó un thumbnail."
 
     baseline_selection_seconds = round(time.perf_counter() - selection_started, 6)
     summary: dict[str, Any] = {

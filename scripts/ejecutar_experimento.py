@@ -398,9 +398,9 @@ def run_case(
             )
 
         if base_summary.get("candidate_pool_hash") != smart_summary.get("candidate_pool_hash"):
-            raise RuntimeError("Baseline and v4.1 candidate hashes differ.")
+            raise RuntimeError("Los hashes del pool de candidatos difieren entre baseline y v4.1.")
         if base_summary.get("candidate_pool_count") != smart_summary.get("candidate_pool_count"):
-            raise RuntimeError("Baseline and v4.1 candidate counts differ.")
+            raise RuntimeError("La cantidad de candidatos difiere entre baseline y v4.1.")
 
         comparison_started = time.perf_counter()
         comparison_summary = compare_patch_selectors(
@@ -459,7 +459,7 @@ def run_case(
                 },
             }
         )
-    except Exception as exc:  # noqa: BLE001 - each WSI must fail independently
+    except Exception as exc:  # noqa: BLE001 - cada WSI debe fallar de forma independiente
         status.update(
             {
                 "status": "failed",
@@ -767,10 +767,10 @@ def main() -> int:
         "uni_model_load_seconds": model_load_seconds,
     }
     print(
-        "[PILOT] "
-        f"speedup={speedup_fraction:.1%}, swap_delta={pilot_gate['swap_delta_mb']} MiB, "
-        f"min_available={pilot_gate['min_available_mb']} MiB, "
-        f"continue_concurrent={continue_concurrent}",
+        "[PILOTO] "
+        f"aceleración={speedup_fraction:.1%}, aumento_swap={pilot_gate['swap_delta_mb']} MiB, "
+        f"memoria_disponible_mínima={pilot_gate['min_available_mb']} MiB, "
+        f"continuar_concurrencia={continue_concurrent}",
         flush=True,
     )
 

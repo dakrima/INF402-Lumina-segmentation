@@ -31,8 +31,6 @@ En la distancia coseno media entre pares, v4.1 obtuvo un valor mayor en 2 de 9 W
 
 Para la distancia media al vecino morfológico más cercano, v4.1 fue mayor en 1 de 9 WSI, el baseline fue mayor en 8 y se observaron 0 empates. La diferencia pareada media fue -0.067177.
 
-Estas métricas describen diversidad morfológica aproximada en el espacio de representaciones de UNI; no demuestran diversidad histológica real ni utilidad clínica.
-
 ## Propuesta breve para la sección III
 
 La diversidad morfológica aproximada se evaluó mediante la distancia coseno entre embeddings UNI de los patches seleccionados. La distancia media entre pares fue 0.591883 ± 0.057795 para el baseline y 0.551488 ± 0.057035 para v4.1, con una diferencia pareada media de -0.040395. La distancia media al vecino morfológico más cercano fue 0.386813 ± 0.052963 y 0.319636 ± 0.055559, respectivamente, con una diferencia pareada media de -0.067177. Estos resultados son descriptivos y corresponden exclusivamente a la diversidad aproximada en el espacio de representaciones de UNI.

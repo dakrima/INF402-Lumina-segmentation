@@ -140,12 +140,12 @@ def distance_metrics(embeddings: np.ndarray) -> tuple[dict[str, float], dict[str
     Retorna las métricas y las comprobaciones de validez de la matriz.
     """
     if embeddings.ndim != 2 or embeddings.shape[0] < 2:
-        raise ValueError("At least two two-dimensional embeddings are required.")
+        raise ValueError("Se requieren al menos dos embeddings bidimensionales.")
     if not np.isfinite(embeddings).all():
-        raise ValueError("Embeddings contain NaN or infinite values.")
+        raise ValueError("Los embeddings contienen valores NaN o infinitos.")
     norms = np.linalg.norm(embeddings, axis=1)
     if np.any(norms <= 1e-12):
-        raise ValueError("Embeddings contain null vectors.")
+        raise ValueError("Los embeddings contienen vectores nulos.")
 
     normalized = normalize_embeddings(embeddings)
     distances = 1.0 - normalized @ normalized.T
@@ -158,8 +158,8 @@ def distance_metrics(embeddings: np.ndarray) -> tuple[dict[str, float], dict[str
     )
     if not symmetric or not diagonal_zero or not bounds_valid:
         raise ValueError(
-            "Invalid cosine-distance matrix: "
-            f"symmetric={symmetric}, diagonal_zero={diagonal_zero}, bounds_valid={bounds_valid}."
+            "Matriz de distancia coseno inválida: "
+            f"simétrica={symmetric}, diagonal_cero={diagonal_zero}, límites_válidos={bounds_valid}."
         )
 
     distances = np.clip(distances, 0.0, 2.0)
@@ -218,11 +218,11 @@ def selected_candidate_ids(
         )
         candidate = shared_by_key.get(key)
         if candidate is None or candidate["case_id"] != case_id:
-            raise ValueError(f"Selected patch is not traceable to the shared pool: {case_id} {key}.")
+            raise ValueError(f"El patch seleccionado no pertenece al pool común: {case_id} {key}.")
         resolved.append(candidate)
     candidate_ids = [row["candidate_id"] for row in resolved]
     if len(candidate_ids) != len(set(candidate_ids)):
-        raise ValueError(f"Duplicate selected candidate in {case_id}.")
+        raise ValueError(f"El caso {case_id} contiene un candidato seleccionado duplicado.")
     fingerprint_rows = sorted(
         (
             row["case_id"],
@@ -263,14 +263,14 @@ def analyze_case(case_dir: Path) -> tuple[list[dict[str, object]], dict[str, obj
     config_hash = canonical_hash(config)
 
     if cached_ids != [str(value) for value in cache_metadata.get("candidate_ids", [])]:
-        raise ValueError(f"Cache and metadata candidate IDs differ for {case_id}.")
+        raise ValueError(f"Los IDs del cache y su metadata difieren para {case_id}.")
     if embeddings.ndim != 2 or embeddings.shape != (
         int(cache_metadata["num_embeddings"]),
         int(cache_metadata["embedding_dim"]),
     ):
-        raise ValueError(f"Invalid embedding-cache shape for {case_id}: {embeddings.shape}.")
+        raise ValueError(f"Dimensiones inválidas del cache de embeddings para {case_id}: {embeddings.shape}.")
     if not np.isfinite(embeddings).all():
-        raise ValueError(f"Embedding cache contains NaN or infinite values for {case_id}.")
+        raise ValueError(f"El cache de embeddings contiene NaN o infinitos para {case_id}.")
 
     shared_rows = read_csv(case_dir / "shared_candidates.csv")
     cache_index = {candidate_id: index for index, candidate_id in enumerate(cached_ids)}
@@ -285,12 +285,12 @@ def analyze_case(case_dir: Path) -> tuple[list[dict[str, object]], dict[str, obj
     for method_dir, method_name in METHODS.items():
         selected_rows = read_csv(case_dir / method_dir / "selected_metadata.csv")
         if any(row.get("selector") != method_name for row in selected_rows):
-            raise ValueError(f"Unexpected selector label for {case_id}/{method_name}.")
+            raise ValueError(f"Etiqueta de selector inesperada para {case_id}/{method_name}.")
         candidate_ids, selection_hash = selected_candidate_ids(case_id, selected_rows, shared_rows)
         missing = [candidate_id for candidate_id in candidate_ids if candidate_id not in cache_index]
         if missing:
             raise ValueError(
-                f"Missing persisted embeddings for {case_id}/{method_name}: {missing}."
+                f"Faltan embeddings persistidos para {case_id}/{method_name}: {missing}."
             )
         selected_embeddings = np.asarray(
             [embeddings[cache_index[candidate_id]] for candidate_id in candidate_ids],
@@ -507,7 +507,7 @@ def main() -> int:
         and (path / "v4_1/selected_metadata.csv").exists()
     )
     if len(case_dirs) != args.expected_cases:
-        raise RuntimeError(f"Expected {args.expected_cases} cases, found {len(case_dirs)}.")
+        raise RuntimeError(f"Se esperaban {args.expected_cases} casos y se encontraron {len(case_dirs)}.")
 
     per_wsi_rows: list[dict[str, object]] = []
     case_validations: list[dict[str, object]] = []
@@ -518,7 +518,7 @@ def main() -> int:
 
     config_hashes = {str(row["embedding_configuration_hash"]) for row in per_wsi_rows}
     if len(config_hashes) != 1:
-        raise RuntimeError("The selected embeddings were generated with different UNI configurations.")
+        raise RuntimeError("Los embeddings seleccionados fueron generados con configuraciones UNI distintas.")
     aggregate_csv, aggregate_summary = aggregate_rows(per_wsi_rows)
     case_differences = {
         case_dir.name: {

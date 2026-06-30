@@ -22,7 +22,7 @@ ARTIFACT_PENALTY_METHOD = "white_black_saturation_low_entropy_heuristic"
 
 def _resize_for_features(rgb_image: Image.Image, feature_size: int) -> Image.Image:
     if feature_size <= 0:
-        raise ValueError("feature_size must be positive.")
+        raise ValueError("feature_size debe ser mayor que cero.")
     resampling = getattr(Image, "Resampling", Image).BILINEAR
     return rgb_image.convert("RGB").resize((feature_size, feature_size), resampling)
 
@@ -93,8 +93,8 @@ def compute_nuclear_signal(
             tissue_mask=tissue_mask,
         )
     raise ValueError(
-        f"Unsupported nuclear_proxy '{nuclear_proxy}'. "
-        "Use one of: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
+        f"nuclear_proxy no soportado '{nuclear_proxy}'. "
+        "Use uno de: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
     )
 
 
@@ -105,8 +105,8 @@ def nuclear_signal_method_for_proxy(nuclear_proxy: str) -> str:
     if nuclear_proxy == "hed_deconvolution":
         return HED_NUCLEAR_SIGNAL_METHOD
     raise ValueError(
-        f"Unsupported nuclear_proxy '{nuclear_proxy}'. "
-        "Use one of: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
+        f"nuclear_proxy no soportado '{nuclear_proxy}'. "
+        "Use uno de: " + ", ".join(sorted(SUPPORTED_NUCLEAR_PROXIES))
     )
 
 

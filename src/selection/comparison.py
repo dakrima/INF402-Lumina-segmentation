@@ -138,8 +138,8 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
     if resolved_output.exists() and any(child.name != ".gitkeep" for child in resolved_output.iterdir()):
         if not overwrite:
             raise FileExistsError(
-                f"Output directory already exists and is not empty: {resolved_output}. "
-                "Use --overwrite to regenerate this comparison."
+                f"La carpeta de salida ya existe y no está vacía: {resolved_output}. "
+                "Use --overwrite para regenerar la comparación."
             )
         dangerous_paths = {
             Path("/").resolve(),
@@ -149,9 +149,9 @@ def _prepare_output_dir(output_dir: Path, root_dir: Path, overwrite: bool) -> No
             resolved_root / "outputs",
         }
         if not _is_relative_to(resolved_output, resolved_root):
-            raise ValueError("--overwrite only clears output directories inside the repository.")
+            raise ValueError("--overwrite solo limpia carpetas de salida dentro del repositorio.")
         if resolved_output in dangerous_paths:
-            raise ValueError(f"Refusing to clear dangerous output path: {resolved_output}")
+            raise ValueError(f"Se rechazó una ruta de salida peligrosa: {resolved_output}")
         shutil.rmtree(resolved_output)
     resolved_output.mkdir(parents=True, exist_ok=True)
 
@@ -188,15 +188,15 @@ def _write_csv(rows: list[dict[str, object]], path: Path, fieldnames: list[str])
 def _validate_result_dir(result_dir: Path) -> None:
     """Comprueba que una corrida contenga manifests, configuración y patches."""
     if not result_dir.exists():
-        raise FileNotFoundError(f"Selector output directory does not exist: {result_dir}")
+        raise FileNotFoundError(f"La carpeta de salida del selector no existe: {result_dir}")
     for file_name in REQUIRED_RESULT_FILES:
         path = result_dir / file_name
         if not path.exists():
-            raise FileNotFoundError(f"Missing required file: {path}")
+            raise FileNotFoundError(f"Falta el archivo requerido: {path}")
     for dir_name in REQUIRED_RESULT_DIRS:
         path = result_dir / dir_name
         if not path.exists() or not path.is_dir():
-            raise FileNotFoundError(f"Missing required directory: {path}")
+            raise FileNotFoundError(f"Falta la carpeta requerida: {path}")
 
 
 def load_selector_run(label: str, directory: Path) -> SelectorRun:
@@ -343,8 +343,8 @@ def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[d
         }
         if baseline_value != smart_value:
             warnings.append(
-                f"Shared field mismatch for {field_name}: "
-                f"baseline={baseline_value!r}, smart={smart_value!r}."
+                f"El campo compartido {field_name} difiere: "
+                f"baseline={baseline_value!r}, v4.1={smart_value!r}."
             )
 
     baseline_pool_keys = _candidate_pool_keys(baseline)
@@ -357,7 +357,7 @@ def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[d
     }
     if not pool_matches:
         warnings.append(
-            "Candidate pool keys differ between methods; comparison may not use the same pool."
+            "Las claves del pool difieren entre métodos; la comparación podría usar pools distintos."
         )
     baseline_hash = baseline.summary.get("candidate_pool_hash")
     smart_hash = smart.summary.get("candidate_pool_hash")
@@ -368,7 +368,7 @@ def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[d
         "matches": hash_matches,
     }
     if not hash_matches:
-        warnings.append("Candidate pool SHA-256 hashes are missing or differ between methods.")
+        warnings.append("Los hashes SHA-256 del pool faltan o difieren entre métodos.")
 
     baseline_coordinates = _candidate_pool_coordinates(baseline)
     smart_coordinates = _candidate_pool_coordinates(smart)
@@ -379,7 +379,7 @@ def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[d
         "matches": coordinates_match,
     }
     if not coordinates_match:
-        warnings.append("Candidate pool coordinates differ between methods.")
+        warnings.append("Las coordenadas del pool difieren entre métodos.")
     return shared_config, warnings
 
 
@@ -597,7 +597,7 @@ def recompute_selected_patch_features(
             filename = str(record["filename"])
             patch_path = selected_dir / filename
             if not patch_path.exists():
-                raise FileNotFoundError(f"Missing selected patch PNG: {patch_path}")
+                raise FileNotFoundError(f"Falta el patch PNG seleccionado: {patch_path}")
             with Image.open(patch_path) as image:
                 features_rgb = compute_patch_features(
                     rgb_patch=image.convert("RGB"),
@@ -761,7 +761,7 @@ def build_comparison_metrics_rows(
                 baseline.summary.get(metric, 0),
                 smart.summary.get(metric, 0),
                 higher_is_better=None,
-                interpretation="Operational count; expected differences depend on selector design.",
+                interpretation="Conteo operativo; las diferencias dependen del diseño de cada selector.",
             )
         )
     rows.append(
@@ -770,7 +770,7 @@ def build_comparison_metrics_rows(
             baseline.summary.get("runtime_seconds"),
             smart.summary.get("runtime_seconds"),
             higher_is_better=False,
-            interpretation="Lower runtime is operationally preferable.",
+            interpretation="Un menor tiempo de ejecución reduce el costo operativo.",
         )
     )
     for metric in [
@@ -784,7 +784,7 @@ def build_comparison_metrics_rows(
                 smart.summary.get(metric),
                 higher_is_better=True,
                 interpretation=(
-                    "Selector-specific diversity or quota metric; compare only when present."
+                    "Métrica de diversidad o cuotas propia del selector; comparar solo cuando exista."
                 ),
             )
         )
@@ -799,7 +799,7 @@ def build_comparison_metrics_rows(
                 baseline.summary.get(metric, ""),
                 smart.summary.get(metric, ""),
                 higher_is_better=None,
-                interpretation="Selector configuration field; descriptive only.",
+                interpretation="Campo descriptivo de configuración del selector.",
             )
         )
     for metric in [
@@ -815,30 +815,30 @@ def build_comparison_metrics_rows(
                 value,
                 value,
                 higher_is_better=None,
-                interpretation="Overlap is descriptive; higher is not necessarily better.",
+                interpretation="El solapamiento es descriptivo; un valor mayor no implica mejora.",
             )
         )
 
     feature_specs = [
-        ("tissue_ratio_recomputed", True, "Higher tissue fraction may indicate less empty background."),
+        ("tissue_ratio_recomputed", True, "Una mayor fracción de tejido puede indicar menos fondo vacío."),
         (
             "nuclear_signal_recomputed",
             True,
-            "Legacy RGB nuclear proxy kept for backward compatibility.",
+            "Proxy nuclear RGB heredado y conservado por compatibilidad.",
         ),
         (
             "nuclear_signal_rgb_recomputed",
             True,
-            "Higher RGB proxy signal may indicate more purple-blue, hematoxylin-like regions.",
+            "Una señal RGB mayor puede indicar más regiones azul-morado asociadas a hematoxilina.",
         ),
         (
             "nuclear_signal_hed_recomputed",
             True,
-            "Higher HED proxy signal may indicate stronger stain-based hematoxylin signal.",
+            "Una señal HED mayor puede indicar más señal de hematoxilina basada en tinción.",
         ),
-        ("visual_entropy_recomputed", True, "Higher entropy may indicate richer visual variation."),
-        ("blur_score_recomputed", True, "Higher gradient variance may indicate sharper texture."),
-        ("artifact_penalty_recomputed", False, "Lower artifact penalty is preferable."),
+        ("visual_entropy_recomputed", True, "Una entropía mayor puede indicar más variación visual."),
+        ("blur_score_recomputed", True, "Una varianza de gradiente mayor puede indicar más nitidez."),
+        ("artifact_penalty_recomputed", False, "Una menor penalización por artefactos es preferible."),
     ]
     for feature_name, higher_is_better, interpretation in feature_specs:
         rows.append(
@@ -860,7 +860,7 @@ def build_comparison_metrics_rows(
                 feature_metrics["baseline"][feature_name]["median"],
                 feature_metrics["smart"][feature_name]["median"],
                 higher_is_better=True,
-                interpretation="Median selected-patch nuclear proxy; heuristic only.",
+                interpretation="Mediana del proxy nuclear en los patches seleccionados.",
             )
         )
 
@@ -880,7 +880,7 @@ def build_comparison_metrics_rows(
                 spatial_metrics["baseline"].get(metric),
                 spatial_metrics["smart"].get(metric),
                 higher_is_better=True,
-                interpretation="Higher value suggests broader spatial dispersion, not clinical superiority.",
+                interpretation="Un valor mayor indica una dispersión espacial más amplia.",
             )
         )
     for field_name in MEDICAL_COMPARISON_FIELDS:
@@ -890,7 +890,7 @@ def build_comparison_metrics_rows(
                 optional_selector_metrics["baseline"]["medical"][field_name]["mean"],
                 optional_selector_metrics["smart"]["medical"][field_name]["mean"],
                 higher_is_better=False if field_name == "medical_artifact_penalty" else True,
-                interpretation="Optional v4.1 medical-image proxy; heuristic and technical only.",
+                interpretation="Proxy técnico opcional de imagen médica utilizado por v4.1.",
             )
         )
     for metric in [
@@ -903,7 +903,7 @@ def build_comparison_metrics_rows(
                 optional_selector_metrics["baseline"]["embedding_clusters"].get(metric),
                 optional_selector_metrics["smart"]["embedding_clusters"].get(metric),
                 higher_is_better=True,
-                interpretation="Optional embedding-cluster diversity metric; descriptive only.",
+                interpretation="Métrica descriptiva opcional de diversidad entre clusters.",
             )
         )
     for metric in [
@@ -917,7 +917,7 @@ def build_comparison_metrics_rows(
                 optional_selector_metrics["baseline"]["embedding_distances"].get(metric),
                 optional_selector_metrics["smart"]["embedding_distances"].get(metric),
                 higher_is_better=True,
-                interpretation="Optional UNI embedding distance metric when compatible cache is available.",
+                interpretation="Métrica opcional de distancia UNI cuando existe un cache compatible.",
             )
         )
     return rows
@@ -943,8 +943,8 @@ def _feature_mean(
 def _preview_nuclear_feature(feature_metrics: dict[str, Any]) -> tuple[str, str]:
     """Selecciona el proxy nuclear disponible y su etiqueta visual."""
     if "nuclear_signal_hed_recomputed" in feature_metrics.get("smart", {}):
-        return "nuclear_signal_hed_recomputed", "mean nuclear HED"
-    return "nuclear_signal_recomputed", "mean nuclear"
+        return "nuclear_signal_hed_recomputed", "media nuclear HED"
+    return "nuclear_signal_recomputed", "media nuclear"
 
 
 def _preview_footer_lines(
@@ -957,19 +957,19 @@ def _preview_footer_lines(
     smart_features = feature_metrics["smart"]
     return [
         (
-            f"selected baseline/smart: {overlap_metrics['num_selected_baseline']} / "
-            f"{overlap_metrics['num_selected_smart']} | overlap: "
+            f"seleccionados baseline/v4.1: {overlap_metrics['num_selected_baseline']} / "
+            f"{overlap_metrics['num_selected_smart']} | solapamiento: "
             f"{overlap_metrics['num_overlap_selected']} | jaccard: "
             f"{_format_float(overlap_metrics['jaccard_selected'])}"
         ),
         (
-            "mean tissue: "
+            "tejido medio: "
             f"{_format_float(baseline_features['tissue_ratio_recomputed']['mean'])} / "
             f"{_format_float(smart_features['tissue_ratio_recomputed']['mean'])} | "
             f"{nuclear_label}: "
             f"{_format_float(_feature_mean(feature_metrics, 'baseline', nuclear_feature))} / "
             f"{_format_float(_feature_mean(feature_metrics, 'smart', nuclear_feature))} | "
-            "mean artifact: "
+            "artefacto medio: "
             f"{_format_float(baseline_features['artifact_penalty_recomputed']['mean'])} / "
             f"{_format_float(smart_features['artifact_penalty_recomputed']['mean'])}"
         ),
@@ -1032,7 +1032,7 @@ def _blank_slide_thumbnail(run: SelectorRun, records: list[dict[str, object]]) -
     image = Image.new("RGB", (width, height), (248, 248, 248))
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, width - 1, height - 1), outline=(190, 190, 190), width=2)
-    draw.text((12, 12), "thumbnail unavailable", fill=(80, 80, 80), font=ImageFont.load_default())
+    draw.text((12, 12), "thumbnail no disponible", fill=(80, 80, 80), font=ImageFont.load_default())
     return image
 
 
@@ -1188,7 +1188,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
     JSON y previews, y retorna el resumen de la comparación.
     """
     if config.feature_size <= 0:
-        raise ValueError("--feature-size must be positive.")
+        raise ValueError("--feature-size debe ser mayor que cero.")
 
     root_dir = config.root_dir.resolve()
     baseline_dir = _resolve_path(config.baseline_dir, root_dir)
@@ -1204,7 +1204,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         coordinates_match = shared_config["candidate_pool_coordinates_exact"]["matches"]
         if not hash_matches or not coordinates_match:
             raise ValueError(
-                "Exact shared candidate pool validation failed; comparison is invalid."
+                "Falló la validación exacta del pool común; la comparación no es válida."
             )
 
     baseline_records = _selected_records(baseline)

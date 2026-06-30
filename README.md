@@ -121,6 +121,7 @@ Los parámetros metodológicos del paper están fijados en `ejecutar_experimento
 ## Pendientes para la reescritura del README
 
 - documentar la fuente exacta y condiciones de acceso de las nueve WSI;
+- resolver la discrepancia entre la mención a BACH y los identificadores `TCGA-*` preservados;
 - explicar la obtención autorizada del checkpoint UNI;
 - describir cada archivo versionado en `results/metrics/` y `results/tables/`;
 - agregar tiempos y requisitos de hardware observados;

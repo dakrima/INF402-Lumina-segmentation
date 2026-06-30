@@ -47,7 +47,7 @@ from src.selection.proposed_selector import (
 )
 
 
-DEFAULT_WSI_DIR = ROOT_DIR / "data/raw/BACH"
+DEFAULT_WSI_DIR = ROOT_DIR / "data/raw/wsi"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "results/runs/inf402_n9"
 DEFAULT_UNI_MODEL = Path(
     os.environ.get("UNI_MODEL_PATH", ROOT_DIR / "models/UNI/pytorch_model.bin")
@@ -588,6 +588,9 @@ def main() -> int:
         return 1
     if not uni_model_path.exists():
         print(f"[ERROR] No existe el modelo UNI: {uni_model_path}")
+        return 1
+    if output_root.exists() and any(output_root.iterdir()) and not args.overwrite:
+        print(f"[ERROR] La salida no está vacía: {output_root}. Use --overwrite para regenerarla.")
         return 1
     output_root.mkdir(parents=True, exist_ok=True)
     experiment_started = time.perf_counter()

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import platform
 import sys
@@ -67,6 +68,9 @@ def check_directories(root_dir: Path) -> list[str]:
 
 
 def main() -> int:
+    argparse.ArgumentParser(
+        description="Verifica dependencias y carpetas mínimas del experimento INF402."
+    ).parse_args()
     root_dir = Path(__file__).resolve().parents[1]
     print("Verificación del entorno INF402 Lumina")
     print("======================================")

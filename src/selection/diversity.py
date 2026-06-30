@@ -1,4 +1,4 @@
-"""Spatial diversity utilities for greedy patch selection."""
+"""Diversidad espacial y por features para la selección greedy."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def proximity_penalty(
     selected_records: list[dict[str, object]],
     min_distance_level0: float,
 ) -> float:
-    """Return max exponential proximity penalty against selected patch centers."""
+    """Retorna la máxima penalización exponencial por cercanía a patches elegidos."""
     if not selected_records:
         return 0.0
     if min_distance_level0 <= 0:
@@ -39,7 +39,7 @@ def proximity_penalty(
 
 
 def parse_quota_grid(quota_grid: str) -> tuple[int, int]:
-    """Parse a quota grid string like 4x4."""
+    """Interpreta una cuadrícula de cuotas como `4x4`."""
     normalized = quota_grid.lower().strip()
     if "x" not in normalized:
         raise ValueError("--quota-grid must use format ROWSxCOLS, for example 4x4.")
@@ -56,7 +56,7 @@ def assign_spatial_regions(
     slide_dimensions: tuple[int, int],
     quota_grid: str,
 ) -> None:
-    """Mutate records with region_id, region_row, region_col and quota_grid."""
+    """Asigna región, fila, columna y cuadrícula espacial a cada registro."""
     grid_rows, grid_cols = parse_quota_grid(quota_grid)
     slide_width, slide_height = slide_dimensions
     for record in records:
@@ -74,7 +74,7 @@ def feature_diversity_bonus(
     selected_records: list[dict[str, object]],
     feature_names: list[str],
 ) -> float:
-    """Return min feature-space distance to selected records."""
+    """Retorna la distancia mínima en features respecto de los registros elegidos."""
     if not selected_records:
         return 0.0
     candidate_vector = [float(candidate.get(feature_name, 0.0)) for feature_name in feature_names]
@@ -130,7 +130,7 @@ def greedy_select_with_spatial_penalty(
     feature_diversity_weight: float = 0.0,
     feature_names: list[str] | None = None,
 ) -> list[dict[str, object]]:
-    """Select records by score_raw with a dynamic spatial redundancy penalty."""
+    """Selecciona por `score_raw` aplicando penalización espacial dinámica."""
     available = list(records)
     selected: list[dict[str, object]] = []
     feature_names = feature_names or []
@@ -192,7 +192,7 @@ def greedy_select_with_spatial_penalty(
 
 
 def score_quantile(records: list[dict[str, object]], quantile: float) -> float:
-    """Return a nearest-rank score_raw quantile for soft quota filtering."""
+    """Retorna el cuantil de `score_raw` usado por el filtro de cuotas suaves."""
     if not records:
         return 0.0
     clipped_quantile = max(0.0, min(1.0, quantile))
@@ -211,7 +211,16 @@ def select_with_spatial_quotas(
     feature_diversity_weight: float,
     feature_names: list[str],
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
-    """Select records using soft regional quotas and automatic quota redistribution."""
+    """
+    ***
+    * records: Candidatos con scores y regiones espaciales.
+    * max_patches: Presupuesto final de patches.
+    * slide_dimensions: Dimensiones de la WSI en nivel 0.
+    * quota_grid: Cuadrícula de regiones para distribuir la selección.
+    ***
+    Selecciona candidatos con cuotas regionales suaves, redistribuyendo cupos que no
+    pueden llenarse. Retorna seleccionados, estadísticas y advertencias técnicas.
+    """
     threshold = score_quantile(records, quota_min_score_quantile)
     eligible = [
         record for record in records

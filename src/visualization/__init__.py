@@ -1,1 +1,1 @@
-"""Visualization helpers for masks and overlays."""
+"""Visualización de patches seleccionados sobre thumbnails."""

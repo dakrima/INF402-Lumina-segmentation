@@ -1,9 +1,4 @@
-"""Classical medical-image processing proxies for patch selection.
-
-The features in this module are technical image-quality and morphology proxies.
-They are not clinical stain grading, not nuclear segmentation, not diagnosis,
-and not RCB estimation.
-"""
+"""Proxies clásicos y deterministas de calidad y utilidad para patches H&E."""
 
 from __future__ import annotations
 
@@ -176,7 +171,7 @@ def _small_mask(mask: np.ndarray, max_size: int = 128) -> np.ndarray:
 
 
 def _component_sizes(mask: np.ndarray, max_size: int = 128) -> list[int]:
-    """Return connected component sizes on a bounded low-resolution mask."""
+    """Retorna tamaños de componentes conectados en una máscara reducida."""
     small = _small_mask(mask, max_size=max_size)
     height, width = small.shape
     visited = np.zeros_like(small, dtype=bool)
@@ -405,7 +400,15 @@ def compute_medical_image_features(
     feature_size: int = 512,
     tumor_bed_relevance_proxy: float = 0.0,
 ) -> dict[str, float]:
-    """Compute classical technical proxies on a downsampled RGB patch."""
+    """
+    ***
+    * rgb_patch: Imagen RGB del candidato.
+    * feature_size: Tamaño de trabajo para las features clásicas.
+    * tumor_bed_relevance_proxy: Score técnico heredado que participa en utilidad.
+    ***
+    Calcula proxies de tinción, tejido, textura, nitidez, pseudo-celularidad y
+    artefactos. Retorna features y scores médicos técnicos normalizados.
+    """
     feature_patch = _resize_for_features(rgb_patch, feature_size=feature_size)
     rgb_array = _rgb_array_01(feature_patch)
     gray = _gray(rgb_array)

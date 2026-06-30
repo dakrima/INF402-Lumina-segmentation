@@ -1,8 +1,4 @@
-"""Embedding utilities for morphology-assisted patch selection.
-
-The UNI backend is used only as a technical morphology representation extractor.
-It is not a clinical classifier, not ground truth, and not a diagnosis.
-"""
+"""Extracción, cache, clustering y distancias de embeddings UNI."""
 
 from __future__ import annotations
 
@@ -28,7 +24,7 @@ UNI_BACKEND_MISSING_MESSAGE = (
 
 @dataclass(frozen=True)
 class EmbeddingExtractorConfig:
-    """Configuration for a patch embedding extractor."""
+    """Configuración del extractor de embeddings."""
 
     embedding_backend: str = "uni"
     embedding_model_name: str = "UNI"
@@ -41,7 +37,7 @@ class EmbeddingExtractorConfig:
 
 
 class PatchEmbeddingExtractor:
-    """Thin wrapper around a torch model that returns one embedding per patch."""
+    """Wrapper de PyTorch que retorna un embedding por patch."""
 
     def __init__(
         self,
@@ -73,7 +69,7 @@ class PatchEmbeddingExtractor:
         return self.torch.stack(tensors, dim=0).to(self.device)
 
     def embed_batch(self, patches: Sequence[Image.Image]) -> np.ndarray:
-        """Return embeddings for a batch of RGB patches."""
+        """Retorna los embeddings de un lote de patches RGB."""
         if not patches:
             return np.zeros((0, 0), dtype=np.float32)
         wait_started = time.perf_counter()
@@ -108,7 +104,7 @@ class PatchEmbeddingExtractor:
         return embeddings.astype(np.float32, copy=False)
 
     def current_thread_wait_seconds(self) -> float:
-        """Return cumulative time this thread waited for the shared UNI model."""
+        """Retorna el tiempo acumulado esperando el modelo UNI compartido."""
         with self._wait_stats_lock:
             return float(self._wait_seconds_by_thread.get(threading.get_ident(), 0.0))
 
@@ -142,7 +138,7 @@ def _resolve_device(torch_module: object, requested_device: str) -> object:
 
 
 def _pil_to_imagenet_tensor(patch: Image.Image, *, torch_module: object) -> object:
-    """Convert a patch to a normalized 224x224 tensor without requiring torchvision."""
+    """Convierte un patch a tensor ImageNet normalizado de 224x224."""
     resampling = getattr(Image, "Resampling", Image).BICUBIC
     resized = patch.convert("RGB").resize((224, 224), resampling)
     array = np.asarray(resized, dtype=np.float32) / 255.0
@@ -292,7 +288,7 @@ def _embedding_extractor_cache_key(config: EmbeddingExtractorConfig) -> tuple[st
 
 
 def build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddingExtractor:
-    """Return one process-wide extractor for the configured UNI model."""
+    """Retorna una única instancia compartida del modelo UNI configurado."""
     global _EMBEDDING_EXTRACTOR_CACHE, _EMBEDDING_EXTRACTOR_LOAD_COUNT
     key = _embedding_extractor_cache_key(config)
     with _EMBEDDING_EXTRACTOR_CACHE_LOCK:
@@ -305,7 +301,7 @@ def build_embedding_extractor(config: EmbeddingExtractorConfig) -> PatchEmbeddin
 
 
 def embedding_extractor_load_count() -> int:
-    """Return the number of UNI model loads in this process."""
+    """Retorna cuántas veces se cargó UNI en el proceso."""
     with _EMBEDDING_EXTRACTOR_CACHE_LOCK:
         return _EMBEDDING_EXTRACTOR_LOAD_COUNT
 
@@ -314,12 +310,12 @@ def compute_patch_embeddings(
     extractor: PatchEmbeddingExtractor,
     patches: Sequence[Image.Image],
 ) -> np.ndarray:
-    """Compute embeddings for a sequence of patches."""
+    """Calcula embeddings para una secuencia de patches."""
     return extractor.embed_batch(patches)
 
 
 def normalize_embeddings(embeddings: np.ndarray) -> np.ndarray:
-    """L2-normalize embeddings row-wise for cosine distance."""
+    """Normaliza cada embedding por L2 para calcular distancia coseno."""
     if embeddings.size == 0:
         return embeddings.astype(np.float32, copy=False)
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
@@ -331,7 +327,7 @@ def cosine_distance_to_selected(
     candidate_embedding: np.ndarray,
     selected_embeddings: np.ndarray,
 ) -> tuple[float, float]:
-    """Return min cosine distance and max cosine similarity to selected rows."""
+    """Retorna distancia coseno mínima y similitud máxima a los seleccionados."""
     if selected_embeddings.size == 0:
         return 1.0, 0.0
     similarities = selected_embeddings @ candidate_embedding
@@ -348,7 +344,7 @@ def write_embedding_cache(
     metadata_path: Path,
     metadata: dict[str, Any],
 ) -> tuple[Path, Path]:
-    """Write embeddings and metadata to output-local cache files."""
+    """Guarda embeddings y metadata en archivos de cache de la corrida."""
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
@@ -375,7 +371,7 @@ def load_embedding_cache(
     cache_path: Path,
     metadata_path: Path,
 ) -> tuple[np.ndarray, list[str], dict[str, Any]]:
-    """Load an embedding cache written by write_embedding_cache."""
+    """Carga un cache generado por `write_embedding_cache`."""
     if not cache_path.exists() or not metadata_path.exists():
         raise FileNotFoundError(
             f"Embedding cache not found: {cache_path} / {metadata_path}"
@@ -398,7 +394,7 @@ def validate_embedding_cache(
     embedding_distance_metric: str,
     expected_dim: int | None,
 ) -> str | None:
-    """Return None when cache matches the current run; otherwise an explanation."""
+    """Retorna `None` si el cache coincide; de lo contrario explica la diferencia."""
     if candidate_ids != cached_candidate_ids:
         return "Embedding cache candidate_ids do not match the current candidate subset."
     if metadata.get("embedding_backend") != embedding_backend:
@@ -430,7 +426,7 @@ def cluster_embeddings(
     seed: int,
     distance_metric: str = "cosine",
 ) -> tuple[np.ndarray, np.ndarray, str, list[str]]:
-    """Cluster embeddings and return labels, centroids, method and warnings."""
+    """Agrupa embeddings y retorna etiquetas, centroides, método y advertencias."""
     warnings: list[str] = []
     if embeddings.ndim != 2:
         raise ValueError("embeddings must be a 2D array.")
@@ -513,7 +509,7 @@ def embedding_cluster_metrics(
     *,
     distance_metric: str,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return distance-to-centroid and representativeness score arrays."""
+    """Retorna distancia al centroide y score de representatividad."""
     if embeddings.size == 0:
         return np.zeros((0,), dtype=np.float32), np.zeros((0,), dtype=np.float32)
     distances = np.zeros((embeddings.shape[0],), dtype=np.float32)

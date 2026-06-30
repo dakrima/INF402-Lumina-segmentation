@@ -1,4 +1,4 @@
-"""Preview utilities for patch selection over small images."""
+"""Visualización de rectángulos de selección sobre imágenes reducidas."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 @dataclass(frozen=True)
 class PatchBox:
-    """Patch rectangle metadata for visual previews."""
+    """Coordenadas y estado de un patch en una preview."""
 
     x: int
     y: int
@@ -24,12 +24,7 @@ def save_patch_selection_preview(
     selected_color: tuple[int, int, int] = (0, 180, 0),
     rejected_color: tuple[int, int, int] = (220, 40, 40),
 ) -> Path:
-    """Draw patch rectangles over an RGB image and save the preview.
-
-    Green rectangles indicate selected patches and red rectangles indicate
-    rejected patches. This helper is intended for ordinary images during early
-    development, not for direct rendering of gigapixel WSI.
-    """
+    """Dibuja en verde los patches seleccionados y en rojo los rechazados."""
     preview = rgb_image.convert("RGB").copy()
     draw = ImageDraw.Draw(preview)
     line_width = max(1, min(preview.size) // 180)

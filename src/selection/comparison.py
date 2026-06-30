@@ -1,4 +1,4 @@
-"""Compare patch selector outputs without running models."""
+"""Comparación técnica de selecciones sin ejecutar modelos adicionales."""
 
 from __future__ import annotations
 
@@ -18,10 +18,6 @@ from PIL import Image, ImageDraw, ImageFont
 from src.selection.quality_filters import compute_patch_features
 
 
-CLINICAL_WARNING = (
-    "Technical patch selection comparison only. Not for diagnosis, not RCB, "
-    "not clinical validation."
-)
 REQUIRED_RESULT_FILES = [
     "candidate_metadata.csv",
     "selected_metadata.csv",
@@ -90,7 +86,7 @@ SHARED_CONFIG_FIELDS = [
 
 @dataclass(frozen=True)
 class SelectorRun:
-    """Loaded selector output directory."""
+    """Manifiestos cargados de una corrida de selección."""
 
     label: str
     directory: Path
@@ -102,7 +98,7 @@ class SelectorRun:
 
 @dataclass(frozen=True)
 class ComparisonConfig:
-    """Configuration for comparing two selector output directories."""
+    """Configuración para comparar las salidas de ambos métodos."""
 
     baseline_dir: Path
     smart_dir: Path
@@ -195,7 +191,7 @@ def _validate_result_dir(result_dir: Path) -> None:
 
 
 def load_selector_run(label: str, directory: Path) -> SelectorRun:
-    """Load and validate a selector output directory."""
+    """Carga y valida los manifiestos requeridos de un selector."""
     _validate_result_dir(directory)
     return SelectorRun(
         label=label,
@@ -305,7 +301,7 @@ def _candidate_pool_coordinates(run: SelectorRun) -> list[tuple[int, int, int, i
 
 
 def validate_shared_config(baseline: SelectorRun, smart: SelectorRun) -> tuple[dict[str, Any], list[str]]:
-    """Validate shared experimental settings and return warnings."""
+    """Valida parámetros y pool comunes, y retorna advertencias técnicas."""
     warnings: list[str] = []
     shared_config: dict[str, Any] = {}
     for field_name in SHARED_CONFIG_FIELDS:
@@ -513,7 +509,7 @@ def _embedding_distance_metrics(run: SelectorRun) -> dict[str, float | None]:
 
 
 def compute_optional_selector_metrics(baseline: SelectorRun, smart: SelectorRun) -> dict[str, Any]:
-    """Compute optional selector metrics when metadata/cache fields are present."""
+    """Calcula métricas opcionales cuando existen metadata y cache compatibles."""
     return {
         "baseline": {
             "medical": _selected_metadata_stats(baseline, MEDICAL_COMPARISON_FIELDS),
@@ -535,7 +531,7 @@ def recompute_selected_patch_features(
     feature_size: int,
     recompute: bool,
 ) -> list[dict[str, object]]:
-    """Build per-selected-patch comparison rows, reading one PNG at a time."""
+    """Recalcula features leyendo un PNG seleccionado a la vez."""
     rows: list[dict[str, object]] = []
     selected_dir = run.directory / "selected"
     for record in records:
@@ -884,56 +880,6 @@ def build_comparison_metrics_rows(
     return rows
 
 
-def build_interpretation(
-    feature_metrics: dict[str, Any],
-    spatial_metrics: dict[str, Any],
-) -> dict[str, Any]:
-    baseline_features = feature_metrics["baseline"]
-    smart_features = feature_metrics["smart"]
-    smart_tissue = smart_features["tissue_ratio_recomputed"]["mean"]
-    baseline_tissue = baseline_features["tissue_ratio_recomputed"]["mean"]
-    nuclear_feature = (
-        "nuclear_signal_hed_recomputed"
-        if "nuclear_signal_hed_recomputed" in smart_features
-        else "nuclear_signal_recomputed"
-    )
-    smart_nuclear = smart_features[nuclear_feature]["mean"]
-    baseline_nuclear = baseline_features[nuclear_feature]["mean"]
-    smart_artifact = smart_features["artifact_penalty_recomputed"]["mean"]
-    baseline_artifact = baseline_features["artifact_penalty_recomputed"]["mean"]
-    smart_nn = spatial_metrics["smart"].get("mean_nearest_neighbor_distance")
-    baseline_nn = spatial_metrics["baseline"].get("mean_nearest_neighbor_distance")
-
-    notes = [
-        "Metrics are heuristic and technical; they do not imply diagnosis or clinical validation.",
-        "Recomputed features use only selected PNG patches and feature_size, not the full WSI.",
-        "nuclear_signal_recomputed is the legacy RGB proxy; RGB and HED proxies are also reported explicitly.",
-    ]
-    if smart_nuclear is not None and baseline_nuclear is not None and smart_nuclear > baseline_nuclear:
-        notes.append("Smart selector chose patches with higher mean nuclear-signal proxy.")
-    if smart_artifact is not None and baseline_artifact is not None and smart_artifact < baseline_artifact:
-        notes.append("Smart selector chose patches with lower mean artifact penalty.")
-    return {
-        "smart_selects_more_tissue_dense_patches": bool(
-            smart_tissue is not None and baseline_tissue is not None and smart_tissue > baseline_tissue
-        ),
-        "smart_has_higher_nuclear_signal": bool(
-            smart_nuclear is not None and baseline_nuclear is not None and smart_nuclear > baseline_nuclear
-        ),
-        "smart_has_lower_artifact_penalty": bool(
-            smart_artifact is not None and baseline_artifact is not None and smart_artifact < baseline_artifact
-        ),
-        "smart_has_lower_or_higher_spatial_diversity": (
-            "higher"
-            if smart_nn is not None and baseline_nn is not None and smart_nn > baseline_nn
-            else "lower_or_equal"
-            if smart_nn is not None and baseline_nn is not None
-            else "unavailable"
-        ),
-        "notes": notes,
-    }
-
-
 def _format_float(value: object, digits: int = 3) -> str:
     number = _to_float(value)
     if number is None:
@@ -1091,7 +1037,7 @@ def save_comparison_preview(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
 ) -> Path:
-    """Create a lightweight side-by-side preview from existing selector previews."""
+    """Crea una preview lado a lado desde las previews de ambos métodos."""
     target_height = 760
     title_height = 56
     footer_height = 100
@@ -1138,7 +1084,7 @@ def save_selected_only_comparison_preview(
     overlap_metrics: dict[str, Any],
     feature_metrics: dict[str, Any],
 ) -> Path:
-    """Create a cleaner side-by-side preview with selected patches only."""
+    """Crea una preview lado a lado mostrando solo los patches elegidos."""
     target_height = 760
     title_height = 56
     footer_height = 100
@@ -1180,48 +1126,15 @@ def save_selected_only_comparison_preview(
     return output_path
 
 
-def write_comparison_notes(
-    output_path: Path,
-    interpretation: dict[str, Any],
-    warnings: list[str],
-    *,
-    smart_selector: str,
-    smart_summary: dict[str, Any],
-) -> Path:
-    warning_lines = "\n".join(f"- {warning}" for warning in warnings) or "- None"
-    note_lines = "\n".join(f"- {note}" for note in interpretation["notes"])
-    spatial_strategy = smart_summary.get("spatial_strategy") or "not reported"
-    body = f"""# Patch Selector Comparison Notes
-
-This comparison is technical only. It does not diagnose, calculate RCB, replace a pathologist, or validate clinical performance.
-
-The smart selector compared here is: `{smart_selector}`.
-
-The comparison reports both RGB and HED nuclear proxies when available. HED is a stain-based heuristic, not nuclear segmentation.
-
-Spatial quota metrics are reported when the smart selector uses spatial quotas. Smart spatial strategy reported by the run: `{spatial_strategy}`.
-
-## Interpretation
-
-- Smart selects more tissue-dense patches: {interpretation['smart_selects_more_tissue_dense_patches']}
-- Smart has higher nuclear-signal proxy: {interpretation['smart_has_higher_nuclear_signal']}
-- Smart has lower artifact penalty: {interpretation['smart_has_lower_artifact_penalty']}
-- Spatial diversity direction: {interpretation['smart_has_lower_or_higher_spatial_diversity']}
-
-## Notes
-
-{note_lines}
-
-## Configuration Warnings
-
-{warning_lines}
-"""
-    output_path.write_text(body, encoding="utf-8")
-    return output_path
-
-
 def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
-    """Compare baseline and smart selector output directories."""
+    """
+    ***
+    * config: Rutas y opciones de la comparación.
+    ***
+    Valida que ambos métodos compartan configuración y pool, recomputa features sobre
+    los patches seleccionados y calcula métricas técnicas y espaciales. Guarda CSV,
+    JSON y previews, y retorna el resumen de la comparación.
+    """
     if config.feature_size <= 0:
         raise ValueError("--feature-size must be positive.")
 
@@ -1292,10 +1205,6 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         "baseline_runtime_seconds": baseline.summary.get("runtime_seconds"),
         "smart_runtime_seconds": smart.summary.get("runtime_seconds"),
     }
-    interpretation = build_interpretation(
-        feature_metrics=feature_metrics,
-        spatial_metrics=spatial_metrics,
-    )
     metrics_rows = build_comparison_metrics_rows(
         baseline=baseline,
         smart=smart,
@@ -1311,7 +1220,6 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
     preview_path = output_dir / "comparison_preview.png"
     selected_only_preview_path = output_dir / "comparison_preview_selected_only.png"
     summary_path = output_dir / "comparison_summary.json"
-    notes_path = output_dir / "comparison_notes.md"
 
     _write_csv(metrics_rows, comparison_metrics_path, COMPARISON_METRICS_FIELDS)
     _write_csv(overlap_rows, selected_overlap_path, SELECTED_OVERLAP_FIELDS)
@@ -1332,14 +1240,6 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         overlap_metrics=overlap_metrics,
         feature_metrics=feature_metrics,
     )
-    write_comparison_notes(
-        notes_path,
-        interpretation,
-        validation_warnings,
-        smart_selector=_selector_title(smart),
-        smart_summary=smart.summary,
-    )
-
     summary = {
         "baseline_dir": str(baseline_dir),
         "smart_dir": str(smart_dir),
@@ -1351,15 +1251,9 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
         "smart_summary": smart.summary,
         "overlap_metrics": overlap_metrics,
         "feature_metrics": feature_metrics,
-        "feature_metric_notes": {
-            "nuclear_signal_recomputed": "Legacy RGB purple/hematoxylin proxy kept for backward compatibility.",
-            "nuclear_signal_rgb_recomputed": "Explicit RGB purple/hematoxylin proxy recomputed on selected PNGs.",
-            "nuclear_signal_hed_recomputed": "Explicit HED stain-deconvolution heuristic recomputed on selected PNGs; not nuclear segmentation.",
-        },
         "spatial_metrics": spatial_metrics,
         "optional_selector_metrics": optional_selector_metrics,
         "runtime_metrics": runtime_metrics,
-        "interpretation": interpretation,
         "outputs": {
             "comparison_summary_json": str(summary_path),
             "comparison_metrics_csv": str(comparison_metrics_path),
@@ -1367,9 +1261,7 @@ def compare_patch_selectors(config: ComparisonConfig) -> dict[str, Any]:
             "comparison_selected_patches_csv": str(selected_patches_path),
             "comparison_preview_png": str(preview_path),
             "comparison_preview_selected_only_png": str(selected_only_preview_path),
-            "comparison_notes_md": str(notes_path),
         },
-        "clinical_warning": CLINICAL_WARNING,
     }
     _write_json(summary, summary_path)
     return summary

@@ -1,4 +1,4 @@
-"""CPU-friendly feature extraction for smart patch selection."""
+"""Extracción en CPU de features clásicas para cada patch."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def _masked_values(values: np.ndarray, mask: np.ndarray) -> np.ndarray:
 
 
 def compute_rgb_purple_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> float:
-    """Approximate hematoxylin/nuclear signal from purple-blue dark pixels."""
+    """Aproxima señal de hematoxilina desde píxeles oscuros azul-morado."""
     red = rgb_array[..., 0]
     green = rgb_array[..., 1]
     blue = rgb_array[..., 2]
@@ -53,7 +53,7 @@ def compute_rgb_purple_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.nda
 
 
 def compute_hed_nuclear_signal(rgb_array: np.ndarray, tissue_mask: np.ndarray) -> float:
-    """Approximate hematoxylin signal with fixed H&E optical-density deconvolution."""
+    """Aproxima hematoxilina mediante deconvolución fija de densidad óptica H&E."""
     eps = 1e-6
     optical_density = -np.log(np.clip(rgb_array, eps, 1.0))
     stain_matrix = np.array(
@@ -81,7 +81,7 @@ def compute_nuclear_signal(
     tissue_mask: np.ndarray,
     nuclear_proxy: str = "rgb_purple",
 ) -> float:
-    """Compute the configured non-clinical nuclear/hematoxylin proxy."""
+    """Calcula el proxy configurado de señal nuclear o hematoxilina."""
     if nuclear_proxy == "rgb_purple":
         return compute_rgb_purple_nuclear_signal(
             rgb_array=rgb_array,
@@ -99,7 +99,7 @@ def compute_nuclear_signal(
 
 
 def nuclear_signal_method_for_proxy(nuclear_proxy: str) -> str:
-    """Return the method label written to manifests for a nuclear proxy."""
+    """Retorna el identificador de método registrado en los manifiestos."""
     if nuclear_proxy == "rgb_purple":
         return RGB_NUCLEAR_SIGNAL_METHOD
     if nuclear_proxy == "hed_deconvolution":
@@ -115,7 +115,7 @@ def compute_visual_entropy(
     tissue_mask: np.ndarray,
     bins: int = 32,
 ) -> float:
-    """Compute normalized grayscale entropy, preferably inside tissue."""
+    """Calcula entropía de grises normalizada, preferentemente dentro del tejido."""
     gray = (
         0.299 * rgb_array[..., 0]
         + 0.587 * rgb_array[..., 1]
@@ -137,7 +137,7 @@ def compute_visual_entropy(
 
 
 def compute_blur_score(rgb_array: np.ndarray) -> float:
-    """Estimate sharpness with grayscale gradient variance."""
+    """Estima nitidez mediante la varianza del gradiente en grises."""
     gray = (
         0.299 * rgb_array[..., 0]
         + 0.587 * rgb_array[..., 1]
@@ -155,7 +155,7 @@ def compute_artifact_penalty(
     tissue_ratio: float,
     visual_entropy: float,
 ) -> float:
-    """Penalize simple non-informative or artifact-like visual patterns."""
+    """Penaliza patrones simples, poco informativos o compatibles con artefactos."""
     brightness = np.mean(rgb_array, axis=-1)
     saturation = np.max(rgb_array, axis=-1) - np.min(rgb_array, axis=-1)
 
@@ -180,7 +180,15 @@ def compute_patch_features(
     feature_size: int = 256,
     nuclear_proxy: str = "rgb_purple",
 ) -> dict[str, float]:
-    """Compute all smart-selector features on a downsampled patch."""
+    """
+    ***
+    * rgb_patch: Imagen RGB del patch candidato.
+    * feature_size: Tamaño usado para reducir el costo de extracción.
+    * nuclear_proxy: Método RGB o HED para aproximar señal nuclear.
+    ***
+    Calcula tejido, señal asociada a tinción, entropía, nitidez y penalización por
+    artefactos. Retorna las features sin modificar el patch original.
+    """
     feature_patch = _resize_for_features(rgb_patch, feature_size=feature_size)
     rgb_array = _rgb_array_01(feature_patch)
     tissue_mask = estimate_thumbnail_tissue_mask(feature_patch)

@@ -1,1 +1,1 @@
-"""Preprocessing helpers for tissue detection and image preparation."""
+"""Preprocesamiento mínimo de WSI y estimación de tejido."""

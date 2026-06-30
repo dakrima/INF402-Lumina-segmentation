@@ -1,1 +1,1 @@
-"""Core package for the INF402 Lumina segmentation project."""
+"""Código del experimento final de selección de patches de INF402 Lumina."""

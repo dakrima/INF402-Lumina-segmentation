@@ -1,4 +1,4 @@
-"""Preview rendering for selected WSI patches."""
+"""Generación de previews para los patches seleccionados."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def save_wsi_patch_selection_preview(
     slide_dimensions: tuple[int, int],
     output_path: Path,
 ) -> Path:
-    """Save a thumbnail preview with evaluated patch rectangles."""
+    """Guarda un thumbnail con los rectángulos de los patches evaluados."""
     boxes = [
         _row_to_patch_box(
             row=row,

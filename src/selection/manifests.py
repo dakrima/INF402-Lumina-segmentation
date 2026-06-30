@@ -1,4 +1,4 @@
-"""Manifest writers for patch selection outputs."""
+"""Escritura estable de manifiestos CSV y JSON del experimento."""
 
 from __future__ import annotations
 
@@ -223,7 +223,7 @@ SELECTED_METADATA_FIELDS = [
 
 
 def utc_now_iso() -> str:
-    """Return an ISO-8601 UTC timestamp for manifests."""
+    """Retorna un timestamp UTC ISO-8601 para los manifiestos."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
@@ -232,7 +232,7 @@ def write_csv_manifest(
     output_path: Path,
     fieldnames: list[str],
 ) -> Path:
-    """Write rows to CSV with stable columns."""
+    """Escribe filas en CSV con columnas y orden estables."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames, extrasaction="ignore")
@@ -243,7 +243,7 @@ def write_csv_manifest(
 
 
 def write_json_manifest(payload: dict[str, Any], output_path: Path) -> Path:
-    """Write an indented JSON manifest."""
+    """Escribe un manifiesto JSON indentado."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",

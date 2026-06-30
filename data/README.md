@@ -1,5 +1,7 @@
 # Datos externos
 
+Para ejecutar las 9 WSIs, estas deben de estar almacenadas en el siguiente path:
+
 ```text
 data/raw/wsi/
 ```

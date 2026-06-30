@@ -1,5 +1,7 @@
 # INF402 - Lumina Segmentation
 
+Integrantes: David Kripper y Emiliano García
+
 Código Fuente del experimento presentado en el paper **“Selección de patches en whole-slide images histopatológicas: comparación entre TIAToolbox y un método asistido por embeddings morfológicos”**.
 
 ## Objetivo

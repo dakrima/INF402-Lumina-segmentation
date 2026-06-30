@@ -1,12 +1,12 @@
 # INF402 - Lumina Segmentation
 
-Repositorio del experimento presentado en el paper **“Selección de patches en whole-slide images histopatológicas: comparación entre TIAToolbox y un método asistido por embeddings morfológicos”**.
+Código Fuente del experimento presentado en el paper **“Selección de patches en whole-slide images histopatológicas: comparación entre TIAToolbox y un método asistido por embeddings morfológicos”**.
 
 ## Objetivo
 
-Comparar un baseline TIAToolbox con un selector que combina calidad técnica, distribución espacial y embeddings UNI para elegir patches informativos desde un pool común.
+El objetivo de este trabajo es comparar un baseline TIAToolbox con un selector que combina calidad técnica, distribución espacial y embeddings UNI para elegir patches informativos desde un pool común.
 
-## Alcance técnico
+## Experimento
 
 El experimento incluye:
 
@@ -17,7 +17,7 @@ El experimento incluye:
 - criterios de diversidad espacial;
 - métricas técnicas, espaciales, morfológicas y de tiempo.
 
-El flujo compara `baseline_tiatoolbox` con `v4_1_medical_embedding_assisted` sobre nueve WSI, con 16 patches por WSI y método. La segmentación downstream no forma parte de este experimento.
+El flujo compara `baseline_tiatoolbox` con `v4_1_medical_embedding_assisted (método propuesto por nosotros)` sobre nueve WSI, con 16 patches por WSI y método.
 
 ## Flujo del experimento
 
@@ -30,7 +30,7 @@ WSI / imagen histopatológica H&E
   -> tablas agregadas
 ```
 
-Ambos métodos reciben el mismo pool inicial y el mismo presupuesto. `baseline_tiatoolbox` selecciona de forma reproducible desde ese pool; `v4_1_medical_embedding_assisted` aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico.
+Ambos métodos reciben el mismo pool inicial y la misma cantidad de WSI. `baseline_tiatoolbox` selecciona de forma reproducible desde ese pool mientras que `v4_1_medical_embedding_assisted` aplica scoring técnico, proxies de imagen médica, embeddings UNI y reranking morfológico.
 
 ## Estructura del repositorio
 
@@ -52,11 +52,9 @@ Ambos métodos reciben el mismo pool inicial y el mismo presupuesto. `baseline_t
 └── src/
 ```
 
-Las WSI, los pesos UNI y las corridas completas se mantienen fuera de Git. Solo se versionan los agregados utilizados para verificar las cifras del paper.
-
 ## Instalación
 
-Conda/Mamba permite coordinar las dependencias Python y librerías nativas como OpenSlide entre macOS, Linux y servidores con GPU.
+Conda/Mamba permite generar un ambiente cerrado con las dependencias Python y librerías nativas como OpenSlide entre macOS, Linux y servidores con GPU.
 
 ```bash
 mamba env create -f environment.yml
@@ -75,14 +73,14 @@ El script revisa las dependencias importadas por el pipeline y las carpetas mín
 
 ## Ejecución del experimento
 
-La ubicación esperada de las nueve WSI se describe en `data/README.md`, y la del checkpoint UNI en `models/README.md`. Con el ambiente activo:
+La ubicación esperada de las nueve WSI se describe en `data/README.md`, y la de UNI en `models/README.md`. Una vez con el ambiente activo correr:
 
 ```bash
 python scripts/ejecutar_experimento.py
 python scripts/generar_resultados.py
 ```
 
-Los parámetros metodológicos del paper están fijados en `scripts/ejecutar_experimento.py`; los argumentos de terminal configuran rutas, cantidad esperada de casos, sobrescritura y autocomprobaciones.
+Una vez ejecutados esos scripts, se deberían de haber generado los resultados del experimemento para las 9 WSIs.
 
 ## Resultados
 
@@ -90,5 +88,3 @@ Los resultados agregados utilizados en el paper se encuentran en:
 
 - `results/metrics/`
 - `results/tables/`
-
-Las corridas completas se generan bajo `results/runs/` y no se versionan debido a su tamaño.

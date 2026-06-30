@@ -1,6 +1,6 @@
 # Diversidad morfológica aproximada en el espacio UNI
 
-Se analizaron los 16 patches previamente seleccionados por método en cada una de las nueve WSI. Todos los embeddings se reutilizaron desde los cachés UNI originales y fueron normalizados por su norma L2 antes de calcular las distancias coseno.
+Se analizaron los 16 patches previamente seleccionados por método en cada una de las nueve WSI. v4.1 corresponde al método propuesto por nosotros.
 
 ## Comparación agregada
 
@@ -25,12 +25,8 @@ Se analizaron los 16 patches previamente seleccionados por método en cada una d
 | TCGA-GM-A3XL | -0.015757 | -0.074570 |
 | TCGA-OL-A66I | -0.037979 | -0.031954 |
 
-## Interpretación descriptiva
+## Interpretación de los resultados
 
 En la distancia coseno media entre pares, v4.1 obtuvo un valor mayor en 2 de 9 WSI, mientras que el baseline fue mayor en 7 y se observaron 0 empates. La diferencia pareada media fue -0.040395.
 
 Para la distancia media al vecino morfológico más cercano, v4.1 fue mayor en 1 de 9 WSI, el baseline fue mayor en 8 y se observaron 0 empates. La diferencia pareada media fue -0.067177.
-
-## Propuesta breve para la sección III
-
-La diversidad morfológica aproximada se evaluó mediante la distancia coseno entre embeddings UNI de los patches seleccionados. La distancia media entre pares fue 0.591883 ± 0.057795 para el baseline y 0.551488 ± 0.057035 para v4.1, con una diferencia pareada media de -0.040395. La distancia media al vecino morfológico más cercano fue 0.386813 ± 0.052963 y 0.319636 ± 0.055559, respectivamente, con una diferencia pareada media de -0.067177. Estos resultados son descriptivos y corresponden exclusivamente a la diversidad aproximada en el espacio de representaciones de UNI.

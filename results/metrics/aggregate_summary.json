@@ -1,0 +1,40 @@
+{
+  "clinical_warning": "Technical patch selection only; not diagnosis or clinical validation.",
+  "failed_cases": [],
+  "memory": {
+    "end_swap_mb": 6973.562,
+    "min_available_mb": 1128.922,
+    "peak_rss_mb": 1886.219,
+    "peak_swap_mb": 7384.375,
+    "samples": 1686,
+    "start_swap_mb": 6973.125,
+    "swap_delta_peak_mb": 411.25
+  },
+  "num_cases_completed": 9,
+  "num_cases_failed": 0,
+  "num_cases_requested": 9,
+  "scheduler": {
+    "concurrency_disabled_after_pressure": true,
+    "continue_concurrent": true,
+    "max_active_wsi": 1,
+    "pilot_case_ids": [
+      "TCGA-E2-A1L7",
+      "TCGA-C8-A26Y"
+    ],
+    "pilot_memory": {
+      "memory_pressure": false,
+      "min_available_mb": 1137.516,
+      "peak_swap_mb": 7372.938,
+      "swap_baseline_mb": 7372.938,
+      "swap_delta_mb": 0.0
+    },
+    "pilot_sequential_counterfactual_seconds": 787.46618,
+    "pilot_speedup_fraction": 0.322029,
+    "pilot_wall_seconds": 533.879559,
+    "remaining_batch_size": 8,
+    "total_wall_seconds": 3356.94077,
+    "uni_model_load_count": 1,
+    "uni_model_load_seconds": 6.764453
+  },
+  "status": "completed"
+}

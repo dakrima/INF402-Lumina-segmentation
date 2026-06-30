@@ -1,0 +1,485 @@
+{
+  "aggregate": {
+    "mean_nearest_neighbor_cosine_distance": {
+      "baseline": {
+        "iqr": 0.07053923606872559,
+        "mean": 0.38681336906221175,
+        "median": 0.3867703080177307,
+        "n": 9,
+        "q1": 0.363480806350708,
+        "q3": 0.4340200424194336,
+        "sd": 0.052963064894149696
+      },
+      "comparison_counts": {
+        "baseline_greater": 8,
+        "ties": 0,
+        "v4_1_greater": 1
+      },
+      "paired_difference_v4_1_minus_baseline": {
+        "iqr": 0.08397215604782104,
+        "mean": -0.06717706223328908,
+        "median": -0.04712879657745361,
+        "n": 9,
+        "q1": -0.11592656373977661,
+        "q3": -0.031954407691955566,
+        "sd": 0.05918116174108143
+      },
+      "v4_1": {
+        "iqr": 0.061112821102142334,
+        "mean": 0.3196363068289227,
+        "median": 0.3286284804344177,
+        "n": 9,
+        "q1": 0.2937030792236328,
+        "q3": 0.35481590032577515,
+        "sd": 0.055559240008649376
+      }
+    },
+    "mean_pairwise_cosine_distance": {
+      "baseline": {
+        "iqr": 0.06074857711791992,
+        "mean": 0.5918825699223412,
+        "median": 0.5984374284744263,
+        "n": 9,
+        "q1": 0.572644829750061,
+        "q3": 0.633393406867981,
+        "sd": 0.057795027234901195
+      },
+      "comparison_counts": {
+        "baseline_greater": 7,
+        "ties": 0,
+        "v4_1_greater": 2
+      },
+      "paired_difference_v4_1_minus_baseline": {
+        "iqr": 0.09776782989501953,
+        "mean": -0.04039478633138868,
+        "median": -0.037979304790496826,
+        "n": 9,
+        "q1": -0.09975433349609375,
+        "q3": -0.0019865036010742188,
+        "sd": 0.08517796026154643
+      },
+      "v4_1": {
+        "iqr": 0.044778406620025635,
+        "mean": 0.5514877835909525,
+        "median": 0.5604581236839294,
+        "n": 9,
+        "q1": 0.5307692289352417,
+        "q3": 0.5755476355552673,
+        "sd": 0.057035315357659086
+      }
+    }
+  },
+  "clinical_warning": "Approximate morphology diversity in UNI representation space only; not real histological diversity or clinical utility.",
+  "cohort": {
+    "case_ids": [
+      "TCGA-A2-A04T",
+      "TCGA-A2-A0CM",
+      "TCGA-A2-A3XS",
+      "TCGA-A7-A0DA",
+      "TCGA-AO-A03U",
+      "TCGA-C8-A26Y",
+      "TCGA-E2-A1L7",
+      "TCGA-GM-A3XL",
+      "TCGA-OL-A66I"
+    ],
+    "cases_expected": 9,
+    "cases_processed": 9,
+    "methods": [
+      "baseline_tiatoolbox",
+      "v4_1_medical_embedding_assisted"
+    ]
+  },
+  "embedding_configuration": {
+    "embedding_backend": "uni",
+    "embedding_device": "cpu",
+    "embedding_distance_metric": "cosine",
+    "embedding_model_name": "UNI",
+    "embedding_model_path": "models/UNI/pytorch_model.bin",
+    "feature_size": 512,
+    "patch_size": 1024
+  },
+  "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+  "metric": {
+    "distance": "cosine_distance_on_l2_normalized_embeddings",
+    "nearest_neighbor": "row_minimum_excluding_diagonal",
+    "pairwise": "upper_triangle_without_diagonal_each_pair_once",
+    "quartiles": "numpy_linear_percentiles_25_75",
+    "standard_deviation": "sample_sd_ddof_1"
+  },
+  "per_wsi_differences_v4_1_minus_baseline": {
+    "TCGA-A2-A04T": {
+      "mean_nearest_neighbor_cosine_distance": -0.11592656373977661,
+      "mean_pairwise_cosine_distance": -0.14428183436393738
+    },
+    "TCGA-A2-A0CM": {
+      "mean_nearest_neighbor_cosine_distance": -0.039890289306640625,
+      "mean_pairwise_cosine_distance": -0.0019865036010742188
+    },
+    "TCGA-A2-A3XS": {
+      "mean_nearest_neighbor_cosine_distance": 0.027980327606201172,
+      "mean_pairwise_cosine_distance": 0.12119600176811218
+    },
+    "TCGA-A7-A0DA": {
+      "mean_nearest_neighbor_cosine_distance": -0.04712879657745361,
+      "mean_pairwise_cosine_distance": -0.05784577131271362
+    },
+    "TCGA-AO-A03U": {
+      "mean_nearest_neighbor_cosine_distance": -0.15926192700862885,
+      "mean_pairwise_cosine_distance": -0.1476782262325287
+    },
+    "TCGA-C8-A26Y": {
+      "mean_nearest_neighbor_cosine_distance": -0.030775725841522217,
+      "mean_pairwise_cosine_distance": 0.02053380012512207
+    },
+    "TCGA-E2-A1L7": {
+      "mean_nearest_neighbor_cosine_distance": -0.1330660879611969,
+      "mean_pairwise_cosine_distance": -0.09975433349609375
+    },
+    "TCGA-GM-A3XL": {
+      "mean_nearest_neighbor_cosine_distance": -0.07457008957862854,
+      "mean_pairwise_cosine_distance": -0.01575690507888794
+    },
+    "TCGA-OL-A66I": {
+      "mean_nearest_neighbor_cosine_distance": -0.031954407691955566,
+      "mean_pairwise_cosine_distance": -0.037979304790496826
+    }
+  },
+  "status": "completed",
+  "validation": {
+    "all_distance_matrices_symmetric": true,
+    "all_distance_matrix_diagonals_zero_within_tolerance": true,
+    "all_distances_finite_and_within_cosine_bounds": true,
+    "case_details": [
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-A2-A04T/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-A2-A04T",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "167f812ca2ffae4d6c12780fde0a0f659f50e7ceb555d3362cefb6f44b734d91",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "2e056c4004677891d66bcf24378aed90ec31f9d088681392f63d5f90dfd92c6c",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-A2-A0CM/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-A2-A0CM",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "63aceba7f605bec6e31a48e048062d97381dd96375141a0250912e17def2c3af",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "782c20408e770ab5b143f6b73de3bd3d9b15f11e9d99da915d47d3ed0259c314",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-A2-A3XS/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-A2-A3XS",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "5eb7b64f00ad10ed2c05d86f0aed7e952082a34d1c09036b3908a25beb748194",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "1a0997d7ec43f97f267e3148125e042eb566edb9d342186db0615bbd16b0323e",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-A7-A0DA/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-A7-A0DA",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "0e612e1860287c36450c84cc6d5645c9abe02d1e0590809af63a13e378ac4c21",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "17f025edcb064dcb34f7899f223505cb295edda19171041833899dddfa52ce74",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-AO-A03U/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          617,
+          1024
+        ],
+        "case_id": "TCGA-AO-A03U",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "e9db4d147892bdfbe0813d968897c32f027d8c461dc7ba7d8a5c835edf7d5133",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "7d31e88ec6acfb9d79a85180b73ac12b8770edd9efe04989ef6352065b5f76b2",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-C8-A26Y/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-C8-A26Y",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "d612208e6058c2ca16d03849105da71e365e6ae7ac88309429fd440d4320cede",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "782bc22012b2d73e15088dc791adbbab71487c56a8cc87debc49f9ec9b776647",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-E2-A1L7/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          632,
+          1024
+        ],
+        "case_id": "TCGA-E2-A1L7",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "0640603c5ae861bbcbe22cdbc7a155a1f2b7817003526c5efc527b40c6fa1db5",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "9b036e82f2655493450ecc9444250070ce3b47b28ca84f4420cf12094bf3cd90",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-GM-A3XL/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-GM-A3XL",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "9a92c9da60ae422e2c456c1abb6714589d4988b6f9d2ded7f2dc712dbcd790e2",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "1ea2a7b4ed4d130536021395dbdc55c7159b3d9289793275f67c805bc741dd76",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      },
+      {
+        "cache_path": "results/runs/inf402_n9/TCGA-OL-A66I/v4_1/embedding_cache.npz",
+        "cache_shape": [
+          1000,
+          1024
+        ],
+        "case_id": "TCGA-OL-A66I",
+        "configuration": {
+          "embedding_backend": "uni",
+          "embedding_device": "cpu",
+          "embedding_distance_metric": "cosine",
+          "embedding_model_name": "UNI",
+          "embedding_model_path": "models/UNI/pytorch_model.bin",
+          "feature_size": 512,
+          "patch_size": 1024
+        },
+        "embedding_configuration_hash": "4fd0adf6ba2d6173a1035ad0addd88918b12f3ecc01599b57b2268dda7376d79",
+        "methods": {
+          "baseline_tiatoolbox": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "d8246ac922fc52c798151d5be1e09c2820fabc7802c974656da54a3b6aa394d6",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          },
+          "v4_1_medical_embedding_assisted": {
+            "bounds_valid": true,
+            "diagonal_zero": true,
+            "selected_patch_count": 16,
+            "selected_patch_fingerprint": "a72d0a1f07c554bd70bac21dcf40d394e54c7e1511ba1908a387c8594cd25799",
+            "symmetric": true,
+            "valid_embedding_count": 16
+          }
+        }
+      }
+    ],
+    "distance_tolerance": 2e-06,
+    "errors": [],
+    "original_selected_patches_traced_exactly": true,
+    "same_uni_configuration_for_all_cases_and_methods": true,
+    "selected_embedding_references_reused": 288,
+    "selected_embeddings_recomputed": 0
+  }
+}

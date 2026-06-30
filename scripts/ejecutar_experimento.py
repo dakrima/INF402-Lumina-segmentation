@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def case_id_from_path(path: Path) -> str:
-    """Obtiene el identificador TCGA utilizado en los manifiestos de la corrida original."""
+    """Obtiene el identificador TCGA utilizado en la corrida original."""
     parts = path.name.split("-")
     if len(parts) < 3:
         raise ValueError(f"No se pudo obtener el identificador TCGA desde {path.name}.")
@@ -99,7 +99,7 @@ def _atomic_json(payload: dict[str, Any], path: Path) -> None:
 
 
 class MemoryMonitor:
-    """Registra memoria del proceso y swap mientras se procesan las WSI."""
+    """Registra memoria del proceso y swap mientras se procesan las WSI. Esto me va a servir para cachar si se me va a morir el proceso por falta de memoria"""
 
     def __init__(self, interval_seconds: float = 2.0) -> None:
         self.interval_seconds = interval_seconds
@@ -204,7 +204,7 @@ class MemoryMonitor:
 
 
 def baseline_config(wsi_path: Path, output_dir: Path) -> BaselineSelectionConfig:
-    """Construye la configuración inmutable del baseline usado en el paper."""
+    """Construye la configuración del baseline."""
     return BaselineSelectionConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
@@ -225,7 +225,7 @@ def v41_config(
     uni_model_path: Path,
     batch_size: int,
 ) -> V41MedicalEmbeddingAssistedConfig:
-    """Construye la configuración exacta del selector propuesto usado en el paper."""
+    """Construye la configuración del selector propuesto."""
     return V41MedicalEmbeddingAssistedConfig(
         wsi_path=wsi_path,
         output_dir=output_dir,
